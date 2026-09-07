@@ -8,7 +8,8 @@ anti-alucinación.
 
 Fase 1 en construcción (orden de trabajo, sección 9 de `CLAUDE.md`):
 
-- [x] Esquema de base de datos (`supabase/migrations/0001_init.sql`)
+- [x] Esquema de base de datos aplicado (`supabase/migrations/0001_init.sql`)
+- [x] Mapa de autores (`scripts/autores.ts`)
 - [x] Script de ingesta de metadata (`scripts/ingesta.ts`)
 - [x] Script de verificación (`scripts/verificar.ts`)
 - [ ] Carga inicial ejecutada y verificada contra la API
@@ -37,7 +38,19 @@ Fase 1 en construcción (orden de trabajo, sección 9 de `CLAUDE.md`):
    **Nunca** el `anon key` en este archivo — el service role es solo para scripts
    locales y Edge Functions.
 
-4. Corre la ingesta (tarda ~15 minutos, son ~192 páginas a 300ms entre requests):
+4. Construye el mapa de autores (tarda ~17 minutos, son ~3,450 autores a 300ms):
+
+   ```bash
+   npm run autores
+   ```
+
+   La API devuelve los autores en forma slug y sin acentos (`carlos-monsivais`);
+   el nombre real solo está en la página pública del autor. Este script lo
+   recupera de ahí y lo cachea en `datos/autores.json`. Es reanudable, y la
+   ingesta lo exige: sin él, `coauthors` son IDs numéricos y ningún artículo
+   tendría autor.
+
+5. Corre la ingesta (tarda ~15 minutos, son ~192 páginas a 300ms entre requests):
 
    ```bash
    npm run ingesta
@@ -48,7 +61,7 @@ Fase 1 en construcción (orden de trabajo, sección 9 de `CLAUDE.md`):
    `X-WP-Total`. Las fechas anteriores a 1978 se excluyen de `articulos` y quedan
    registradas en `logs/fechas-sospechosas.jsonl` para revisión manual.
 
-5. Verifica que la ingesta cuadra con la API:
+6. Verifica que la ingesta cuadra con la API:
 
    ```bash
    npm run verificar
@@ -58,17 +71,16 @@ Fase 1 en construcción (orden de trabajo, sección 9 de `CLAUDE.md`):
    entidades HTML sin decodificar en los títulos y que no haya fechas anteriores a 1978.
    Sale con código distinto de cero si algo no cuadra.
 
-## Por qué no se corrió ya
-
-Este script está pensado para correr localmente (así lo pide `CLAUDE.md` sección 2, para
-evitar el timeout de las Edge Functions). El entorno de esta sesión, además, no tiene
-salida de red hacia `nexos.com.mx`. Los tres pasos de arriba (crear proyecto, `.env`,
-`npm run ingesta`) hay que correrlos donde sí haya esa salida.
-
 ## Scripts
 
 | Comando | Qué hace |
 |---|---|
+| `npm run autores` | Construye `datos/autores.json` (id de coautor → nombre real con acentos) |
 | `npm run ingesta` | Carga/actualiza metadata de los 19,145 artículos desde WordPress |
 | `npm run verificar` | Compara la base local contra la API y falla si no cuadra |
 | `npm run typecheck` | `tsc --noEmit` sobre `scripts/` |
+
+Los tres primeros pegan a `nexos.com.mx`, así que necesitan salida de red hacia ese
+dominio. Ojo con una trampa: el `fetch` de Node no lee `HTTPS_PROXY` (curl sí), por
+lo que detrás de un proxy obligatorio todo falla con 403 sin explicación.
+`scripts/lib/red.ts` lo resuelve y no estorba cuando no hay proxy.

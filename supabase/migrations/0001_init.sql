@@ -1,6 +1,10 @@
 -- Archivo Nexos — esquema inicial (fase 1: metadata; fase 2: cuerpo + vectores).
 -- Ver CLAUDE.md sección 5 (esquema) y sección 6 (seguridad).
 
+-- pgvector: necesaria para halfvec/hnsw en `chunks` (fase 2). Se habilita ya
+-- para no tener que migrar de nuevo cuando llegue esa fase.
+create extension if not exists vector with schema extensions;
+
 create table articulos (
   id              bigint primary key,        -- ID de WordPress, nunca generar otro
   url             text not null,

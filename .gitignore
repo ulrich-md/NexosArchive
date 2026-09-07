@@ -12,3 +12,4 @@ logs/*.log
 # porque los imports de paquete (dotenv, supabase-js) solo resuelven dentro del
 # proyecto; el script que los crea los borra al terminar.
 _*.mts
+logs/*.txt

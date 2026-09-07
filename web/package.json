@@ -3,10 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Frontend del Archivo Nexos. Replica el diseño de archivonexos.online (CLAUDE.md sección 3).",
+  "description": "Frontend del Archivo Nexos. Replica el dise\u00f1o de archivonexos.online (CLAUDE.md secci\u00f3n 3).",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run verificar:seguridad && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "verificar:seguridad": "node scripts/verificar-seguridad.mjs"

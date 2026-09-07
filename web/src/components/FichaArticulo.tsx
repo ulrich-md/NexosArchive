@@ -35,7 +35,7 @@ export function FichaArticulo({ articulo }: { articulo: Articulo }) {
         {conAutor ? (
           articulo.autores.map((autor, i) => (
             <span key={autor}>
-              {i > 0 ? <span className="px-1">,</span> : null}
+              {i > 0 ? <span className="pr-1">,</span> : null}
               <a
                 href={urlBusquedaNexos(autor)}
                 target="_blank"

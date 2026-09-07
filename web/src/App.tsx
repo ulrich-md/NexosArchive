@@ -84,7 +84,7 @@ export default function App() {
         setTurnos((ts) => ts.map((t) => (t.id === idTurno ? { ...t, lento: true } : t)));
       }, MS_AVISO_LENTO);
 
-      const marcaLimite = window.setTimeout(() => control.abort(), MS_LIMITE);
+      const marcaLimite = window.setTimeout(() => control.abort('limite'), MS_LIMITE);
 
       try {
         const respuesta = await buscar({ pregunta, modo: modoUsado }, control.signal);
@@ -98,12 +98,13 @@ export default function App() {
       } catch (e: unknown) {
         const abortado = e instanceof DOMException && e.name === 'AbortError';
         const error = abortado
-          ? new ErrorConsulta(
-              'cancelada',
-              control.signal.reason === undefined
-                ? 'La consulta se detuvo porque pasó de 45 segundos.'
-                : 'Cancelaste la consulta.',
-            )
+          ? control.signal.reason === 'limite'
+            ? new ErrorConsulta(
+                'tiempo_agotado',
+                'La consulta se detuvo porque pasó de 45 segundos sin respuesta.',
+                'El backend no contestó dentro del límite. Puede ser una consulta sin índice o una Edge Function caída.',
+              )
+            : new ErrorConsulta('cancelada', 'Cancelaste la consulta.')
           : e instanceof Error
             ? e
             : new ErrorConsulta('desconocido', 'No se pudo consultar el archivo.');
@@ -180,6 +181,7 @@ export default function App() {
         <BarraLateral
           abierta={sidebarAbierta || menuMovil}
           onAbierta={setSidebarAbierta}
+          onCerrarMovil={() => setMenuMovil(false)}
           facetas={facetas}
           cargandoFacetas={cargandoFacetas}
           errorFacetas={errorFacetas}

@@ -7,6 +7,7 @@ import {
   PanelLeftOpen,
   Plus,
   Search,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +50,7 @@ function FilaFaceta({
 export function BarraLateral({
   abierta,
   onAbierta,
+  onCerrarMovil,
   facetas,
   cargandoFacetas,
   errorFacetas,
@@ -62,6 +64,7 @@ export function BarraLateral({
 }: {
   abierta: boolean;
   onAbierta: (v: boolean) => void;
+  onCerrarMovil: () => void;
   facetas: RespuestaFacetas | null;
   cargandoFacetas: boolean;
   errorFacetas: string | null;
@@ -126,11 +129,22 @@ export function BarraLateral({
       {/* Logo + botón de colapsar, esquina superior derecha del sidebar. */}
       <div className="flex items-center justify-between px-3 py-4">
         <LogoNexos tamano="sm" />
+        {/* En móvil el sidebar es un cajón: se cierra. En escritorio se colapsa. */}
+        <Button
+          variant="texto"
+          size="icono"
+          aria-label="Cerrar menú"
+          onClick={onCerrarMovil}
+          className="md:hidden"
+        >
+          <X className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+        </Button>
         <Button
           variant="texto"
           size="icono"
           aria-label="Colapsar barra lateral"
           onClick={() => onAbierta(false)}
+          className="hidden md:flex"
         >
           <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} aria-hidden />
         </Button>

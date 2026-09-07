@@ -7,6 +7,7 @@
   "scripts": {
     "autores": "tsx scripts/autores.ts",
     "ingesta": "tsx scripts/ingesta.ts",
+    "recuperar-autores": "tsx scripts/recuperar-autores.ts",
     "enriquecer": "tsx scripts/enriquecer.ts",
     "verificar": "tsx scripts/verificar.ts",
     "typecheck": "tsc --noEmit"

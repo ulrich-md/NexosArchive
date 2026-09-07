@@ -1,9 +1,0 @@
-
-> archivo-nexos@0.1.0 autores
-> tsx scripts/autores.ts
-
-Archivo Nexos — mapa de autores (id -> nombre real)
-
-Listando coautores desde /wp/v2/coauthors...
-3447 coautores en la taxonomía.
-

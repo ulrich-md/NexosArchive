@@ -5,3 +5,4 @@ dist/
 logs/*.jsonl
 logs/*.csv
 !logs/.gitkeep
+datos/

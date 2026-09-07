@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Buscador conversacional interno sobre el archivo completo de la revista Nexos (1978-2026).",
   "scripts": {
+    "autores": "tsx scripts/autores.ts",
     "ingesta": "tsx scripts/ingesta.ts",
     "verificar": "tsx scripts/verificar.ts",
     "typecheck": "tsc --noEmit"
@@ -12,7 +13,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "dotenv": "^16.4.5",
-    "he": "^1.2.0"
+    "he": "^1.2.0",
+    "undici": "^8.10.2"
   },
   "devDependencies": {
     "@types/he": "^1.2.3",

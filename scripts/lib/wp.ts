@@ -1,26 +1,58 @@
-// Cliente mínimo para el WordPress de Nexos. Ver CLAUDE.md sección 2.
+// Cliente para el WordPress de Nexos.
+// Todo lo de aquí está verificado contra la API real el 2026-09-07; ver
+// CLAUDE.md sección 2 para los hallazgos que corrigen el spec original.
+import './red.js';
 import he from 'he';
 
 export const WP_BASE = (process.env.WP_BASE_URL ?? 'https://www.nexos.com.mx/wp-json/wp/v2').replace(/\/$/, '');
+export const SITIO = WP_BASE.replace(/\/wp-json\/wp\/v2$/, '');
 
 const MESES = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ];
-const RE_NUMERO_REVISTA = new RegExp(`^(19|20)\\d{2}\\s+(${MESES.join('|')})$`, 'i');
+
+// Los números de la revista aparecen como categorías en dos formas:
+// "1978 Enero" (id 4) y también solo el año, "1978" (id 3). Las dos son
+// número de revista; ninguna es una sección temática.
+const RE_NUMERO_CON_MES = new RegExp(`^(19|20)\\d{2}\\s+(${MESES.join('|')})$`, 'i');
+const RE_NUMERO_SOLO_ANIO = /^(19|20)\d{2}$/;
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Decodifica entidades HTML (&#8211;, &amp;, &#8220;...) y normaliza espacios. */
+/**
+ * Deja texto plano: decodifica entidades HTML (&#8211;, &amp;, &#8220;) y
+ * quita etiquetas. El 14% de los títulos de Nexos traen <em> para los títulos
+ * de obras; sin esto la ficha mostraría "<em>Audición</em>" literal.
+ */
 export function decode(texto: string | null | undefined): string {
   if (!texto) return '';
-  return he.decode(texto).replace(/\s+/g, ' ').trim();
+  const sinEtiquetas = texto.replace(/<[^>]*>/g, '');
+  return he.decode(sinEtiquetas).replace(/\s+/g, ' ').trim();
 }
 
 export function esNumeroRevista(nombreCategoria: string): boolean {
-  return RE_NUMERO_REVISTA.test(nombreCategoria.trim());
+  const n = nombreCategoria.trim();
+  return RE_NUMERO_CON_MES.test(n) || RE_NUMERO_SOLO_ANIO.test(n);
+}
+
+export function esNumeroConMes(nombreCategoria: string): boolean {
+  return RE_NUMERO_CON_MES.test(nombreCategoria.trim());
+}
+
+/**
+ * Convierte "2009 Febrero" en 2009-02-01. Se usa para recuperar la fecha de
+ * los artículos cuyo `date` viene corrupto: el número de la revista es
+ * metadata del propio archivo, así que la fecha se recupera, no se inventa.
+ */
+export function fechaDesdeNumero(numero: string): string | null {
+  const m = numero.trim().match(new RegExp(`^((?:19|20)\\d{2})(?:\\s+(${MESES.join('|')}))?$`, 'i'));
+  if (!m) return null;
+  const anio = m[1];
+  const mes = m[2] ? String(MESES.indexOf(m[2].toLowerCase()) + 1).padStart(2, '0') : '01';
+  return `${anio}-${mes}-01`;
 }
 
 interface ErrorWp extends Error {
@@ -65,41 +97,116 @@ export async function fetchJson<T>(url: string, maxRetries = 6): Promise<{ data:
   }
 }
 
-interface CategoriaWp {
-  id: number;
-  name: string;
+/** GET de HTML plano, con el mismo reintento que fetchJson. */
+export async function fetchTexto(url: string, maxRetries = 4): Promise<string | null> {
+  let intento = 0;
+  for (;;) {
+    const res = await fetch(url);
+    if (res.ok) return res.text();
+    if (res.status === 404) return null;
+
+    const reintentable = res.status === 429 || res.status >= 500;
+    if (!reintentable || intento >= maxRetries) return null;
+
+    await sleep(Math.min(30_000, 500 * 2 ** intento) + Math.random() * 250);
+    intento++;
+  }
 }
 
-/** Descarga /wp/v2/categories completo y arma el mapa id -> nombre decodificado. */
-export async function construirMapaCategorias(): Promise<Map<number, string>> {
-  const mapa = new Map<number, string>();
+interface TerminoWp {
+  id: number;
+  name: string;
+  slug?: string;
+}
+
+/** Pagina cualquier taxonomía de WP (categories, coauthors) y devuelve todos los términos. */
+async function todosLosTerminos(taxonomia: string, delayMs: number): Promise<TerminoWp[]> {
+  const terminos: TerminoWp[] = [];
   for (let page = 1; ; page++) {
-    const url = `${WP_BASE}/categories?per_page=100&page=${page}&_fields=id,name`;
+    const url = `${WP_BASE}/${taxonomia}?per_page=100&page=${page}&_fields=id,name,slug`;
     let respuesta;
     try {
-      respuesta = await fetchJson<CategoriaWp[]>(url);
+      respuesta = await fetchJson<TerminoWp[]>(url);
     } catch (err) {
       if ((err as ErrorWp).status === 400) break; // rest_post_invalid_page_number
       throw err;
     }
     if (respuesta.data.length === 0) break;
-    for (const cat of respuesta.data) mapa.set(cat.id, decode(cat.name));
-    await sleep(300);
+    terminos.push(...respuesta.data);
+    await sleep(delayMs);
+  }
+  return terminos;
+}
+
+/** Mapa id -> nombre de categoría (números de revista y secciones). */
+export async function construirMapaCategorias(delayMs = 300): Promise<Map<number, string>> {
+  const mapa = new Map<number, string>();
+  for (const cat of await todosLosTerminos('categories', delayMs)) {
+    mapa.set(cat.id, decode(cat.name));
   }
   return mapa;
 }
 
+export interface CoautorWp {
+  id: number;
+  slug: string;
+  nombreApi: string; // forma slug que devuelve la API: "carlos-monsivais"
+}
+
+/** Lista de coautores desde /wp/v2/coauthors (taxonomía pública, ~3,450 términos). */
+export async function listarCoautores(delayMs = 300): Promise<CoautorWp[]> {
+  return (await todosLosTerminos('coauthors', delayMs)).map((t) => ({
+    id: t.id,
+    slug: t.slug ?? '',
+    nombreApi: decode(t.name),
+  }));
+}
+
 /**
- * A veces coauthors trae objetos con nombre, a veces IDs numéricos sueltos.
- * Los IDs no se pueden resolver sin /wp/v2/users (401 sin credenciales), así
- * que se ignoran: nunca se inventa un nombre a partir de un ID.
+ * El nombre real del autor, con acentos, solo existe en la página pública del
+ * autor: el h1 viene como "Nexos • Carlos Monsiváis". La API únicamente expone
+ * la forma slug ("carlos-monsivais"), y reponerle los acentos a mano sería
+ * inventar datos, que es justo lo que prohíbe la sección 7. Así que se recupera
+ * de la página. Devuelve null si no se pudo obtener: sin nombre, no hay autor.
  */
-export function resolverAutores(coauthors: unknown): { autores: string[]; confianza: 'wp' | 'ausente' } {
+export async function nombreRealDeCoautor(slug: string): Promise<string | null> {
+  if (!slug) return null;
+  const html = await fetchTexto(`${SITIO}/author/${slug}/`);
+  if (!html) return null;
+
+  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1) {
+    const texto = decode(h1[1]).replace(/^Nexos\s*[•·]\s*/, '').trim();
+    if (texto && texto.toLowerCase() !== 'nexos') return texto;
+    if (texto) return texto;
+  }
+
+  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (title) {
+    const texto = decode(title[1]).replace(/\s*[–-]\s*Nexos\s*$/i, '').trim();
+    if (texto && !/^Nexos$/i.test(texto) && !/no encontrada/i.test(texto)) return texto;
+  }
+
+  return null;
+}
+
+/**
+ * Resuelve el array `coauthors` de un post (IDs numéricos) a nombres reales
+ * usando el mapa ya construido. Un ID que no esté en el mapa se descarta:
+ * nunca se inventa un nombre a partir de un número.
+ */
+export function resolverAutores(
+  coauthors: unknown,
+  mapaAutores: Map<number, string>,
+): { autores: string[]; confianza: 'wp' | 'ausente' } {
   const nombres = new Set<string>();
 
   if (Array.isArray(coauthors)) {
     for (const entrada of coauthors) {
-      if (typeof entrada === 'string') {
+      if (typeof entrada === 'number') {
+        const nombre = mapaAutores.get(entrada);
+        if (nombre) nombres.add(nombre);
+      } else if (typeof entrada === 'string') {
         const nombre = decode(entrada);
         if (nombre) nombres.add(nombre);
       } else if (entrada && typeof entrada === 'object') {
@@ -107,7 +214,6 @@ export function resolverAutores(coauthors: unknown): { autores: string[]; confia
         const candidato = obj.display_name ?? obj.name ?? obj.title;
         if (typeof candidato === 'string' && candidato.trim()) nombres.add(decode(candidato));
       }
-      // entrada numérica (ID sin resolver): se descarta, no se inventa nombre.
     }
   }
 

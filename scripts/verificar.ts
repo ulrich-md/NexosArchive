@@ -1,5 +1,6 @@
 // npm run verificar — compara la ingesta contra la API en vivo y falla
 // ruidosamente si no cuadra. Ver CLAUDE.md secciones 1 y 9.
+import './lib/red.js';
 import 'dotenv/config';
 import { clienteSupabase } from './lib/supabase.js';
 import { WP_BASE, fetchJson, sleep } from './lib/wp.js';

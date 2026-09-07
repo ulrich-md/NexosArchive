@@ -7,10 +7,12 @@
   "scripts": {
     "autores": "tsx scripts/autores.ts",
     "ingesta": "tsx scripts/ingesta.ts",
+    "enriquecer": "tsx scripts/enriquecer.ts",
     "verificar": "tsx scripts/verificar.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "@supabase/supabase-js": "^2.45.4",
     "dotenv": "^16.4.5",
     "he": "^1.2.0",

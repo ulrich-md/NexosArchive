@@ -1,0 +1,23 @@
+{
+  "name": "archivo-nexos",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Buscador conversacional interno sobre el archivo completo de la revista Nexos (1978-2026).",
+  "scripts": {
+    "ingesta": "tsx scripts/ingesta.ts",
+    "verificar": "tsx scripts/verificar.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.4.5",
+    "he": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/he": "^1.2.3",
+    "@types/node": "^22.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}

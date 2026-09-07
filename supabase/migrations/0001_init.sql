@@ -5,6 +5,20 @@
 -- para no tener que migrar de nuevo cuando llegue esa fase.
 create extension if not exists vector with schema extensions;
 
+-- Postgres marca array_to_string() como STABLE, no IMMUTABLE, porque en el
+-- caso general depende de las funciones de salida del tipo del arreglo. Una
+-- columna generada solo acepta expresiones inmutables, así que la columna `ts`
+-- de `articulos` fallaba con:
+--   ERROR 42P17: generation expression is not immutable
+-- Para text[] la conversión sí es inmutable, así que se envuelve. (to_tsvector
+-- con regconfig explícito sí es inmutable: ese no era el problema.)
+create or replace function autores_a_texto(text[])
+  returns text
+  language sql
+  immutable
+  parallel safe
+as $$ select array_to_string($1, ' ') $$;
+
 create table articulos (
   id              bigint primary key,        -- ID de WordPress, nunca generar otro
   url             text not null,
@@ -23,7 +37,7 @@ create table articulos (
   ts tsvector generated always as (
     to_tsvector('spanish',
       coalesce(titulo,'') || ' ' ||
-      coalesce(array_to_string(autores,' '),'') || ' ' ||
+      coalesce(autores_a_texto(autores),'') || ' ' ||
       coalesce(cuerpo,''))
   ) stored,
   constraint autor_confianza_valida check (autor_confianza in ('wp', 'extraido', 'ausente'))

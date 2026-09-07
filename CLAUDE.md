@@ -38,10 +38,38 @@ Base: `https://www.nexos.com.mx/wp-json/wp/v2/`
 **Verificado el 2026-09-07:**
 - `GET /posts?per_page=1` → header `X-WP-Total: 19145`
 - Campos útiles y públicos: `id, date, link, title, coauthors, categories`
-- Las categorías con forma `"AAAA Mes"` (ej. `"1988 Enero"`, id 2854) son los **números de la revista**. Hay ~600 categorías; las demás son secciones temáticas.
 - **El cuerpo del artículo está tras el paywall.** Sin autenticar, `content` y `excerpt` vienen **vacíos** y `class_list` incluye `access-restricted` / `membership-content`.
-- `/wp/v2/users` → **401**. Los `coauthors` a veces son IDs numéricos que no se pueden resolver sin credenciales.
-- El archivo impreso (1978 – ~2005) **no trae autor** en `coauthors`. Es un hecho conocido del archivo, no un bug que se tape inventando datos.
+- `/wp/v2/users` → **401**, y `_embed=author` devuelve `rest_user_invalid_id`.
+
+### Corrección del spec — reconocimiento contra la API en vivo (2026-09-07)
+
+Varias afirmaciones del spec original resultaron falsas al contrastarlas con la API.
+Lo que sigue está verificado y es lo que implementa el código; **no volver a la
+versión anterior de estos supuestos.**
+
+| Supuesto del spec | Realidad verificada |
+|---|---|
+| Los `coauthors` numéricos no se pueden resolver sin credenciales | **`/wp/v2/coauthors` responde 200** y es una taxonomía pública con **3,447 términos**. Resuelve los IDs sin autenticar. |
+| El archivo impreso (1978–2005) no trae autor | **Sí trae `coauthors`.** Los posts de enero de 1978 ya tienen autor (ids 45, 3236, 3237). |
+| Hay ~600 categorías | **752 categorías.** |
+| Los números de revista tienen forma `"AAAA Mes"` | Existen en **dos** formas: `"1978 Enero"` (id 4) y **también solo el año**, `"1978"` (id 3). Las dos son número de revista; tratar la segunda como sección contamina el campo `seccion`. |
+| Hay fechas basura que arrastran el rango a 1970 | Son **exactamente 2 posts** (ids 12920 y 12921, ambos `1970-01-01`). Los dos pertenecen al número **"2009 Febrero"**, así que su fecha real se recupera del número. |
+| Los títulos traen entidades HTML (`&#8211;`) | En la muestra revisada, **0% entidades pero 14% etiquetas HTML** (`<em>` en títulos de obras). Hay que quitar etiquetas además de decodificar entidades. |
+
+**Los nombres de autor no vienen con acentos en la API.** `/wp/v2/coauthors` devuelve
+`name` en forma slug (`"carlos-monsivais"`). El nombre real solo existe en la página
+pública del autor, `https://www.nexos.com.mx/author/{slug}/`, cuyo `<h1>` viene como
+`"Nexos • Carlos Monsiváis"`. Reponer los acentos a mano sería inventar datos
+(sección 7), así que se recuperan de ahí. `npm run autores` construye ese mapa y lo
+cachea en `datos/autores.json`; es reanudable y tarda ~17 min.
+
+**Trampa de entorno:** el `fetch` global de Node **no lee `HTTPS_PROXY`** (curl sí).
+Detrás de un proxy de salida obligatorio, todas las peticiones fallan con 403 sin
+explicación. `scripts/lib/red.ts` instala el `EnvHttpProxyAgent` de undici y debe
+importarse antes de cualquier fetch; en local, donde no hay proxy, no hace nada.
+
+**Conteos por año confirmados contra la API**, exactos, sin desviación:
+1988 → 246, 1994 → 283, 2006 → 307, 2016 → 568, 2024 → 463.
 ### Las dos fases
 **Fase 1 (ahora, sin credenciales).** Metadata pública de los 19,145 artículos:
 título, fecha, liga, número, autor cuando exista. Con esto ya funcionan los modos

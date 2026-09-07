@@ -93,9 +93,12 @@ function filtrosDeClasificacion(c: Clasificacion): FiltrosConsulta {
   };
 }
 
-async function manejar(req: Request, t0: number): Promise<Response> {
-  const traza: PasoTraza[] = [];
-  const avisos: Aviso[] = [];
+async function manejar(
+  req: Request,
+  t0: number,
+  traza: PasoTraza[],
+  avisos: Aviso[],
+): Promise<Response> {
 
   let cuerpoCrudo: unknown;
   try {
@@ -245,6 +248,10 @@ async function manejar(req: Request, t0: number): Promise<Response> {
 
 Deno.serve(async (req: Request) => {
   const t0 = performance.now();
+  // La traza y los avisos viven fuera del manejador para que un error a mitad
+  // de camino igual le enseñe al editor hasta dónde llegó la consulta.
+  const traza: PasoTraza[] = [];
+  const avisos: Aviso[] = [];
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: encabezadosCors(req) });
@@ -270,12 +277,12 @@ Deno.serve(async (req: Request) => {
       );
     });
 
-    return await Promise.race([manejar(req, t0), vigilante]);
+    return await Promise.race([manejar(req, t0, traza, avisos), vigilante]);
   } catch (e) {
     const err = comoErrorBuscar(e);
     if (err.estado >= 500) {
       console.error(`[buscar] ${err.codigo}: ${err.message}`, err.detalle ?? '', err.causa ?? '');
     }
-    return respuestaError(err, req, [], [], performance.now() - t0);
+    return respuestaError(err, req, traza, avisos, performance.now() - t0);
   }
 });

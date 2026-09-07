@@ -50,6 +50,8 @@ export const MODELO_SINTESIS = env('MODELO_SINTESIS') ?? 'claude-sonnet-5';
 export const MODELO_RERANK = env('MODELO_RERANK') ?? 'claude-haiku-4-5';
 
 export const TIMEOUT_ROUTER_MS = entero('TIMEOUT_ROUTER_MS', 8_000);
+/** Reloj de pared de toda la petición: nunca una pestaña congelada. */
+export const TIMEOUT_TOTAL_MS = entero('TIMEOUT_TOTAL_MS', 30_000);
 export const TIMEOUT_SINTESIS_MS = entero('TIMEOUT_SINTESIS_MS', 25_000);
 export const MAX_TOKENS_ROUTER = entero('MAX_TOKENS_ROUTER', 1_024);
 export const MAX_TOKENS_SINTESIS = entero('MAX_TOKENS_SINTESIS', 8_000);

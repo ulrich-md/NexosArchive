@@ -60,24 +60,24 @@ interface RegistroConsulta {
  * al carril `catalogo`, que tiene que responder en menos de 100 ms.
  */
 export function registrarConsulta(registro: RegistroConsulta): void {
-  const promesa = bd()
-    .from('consultas')
-    .insert({
-      usuario: registro.usuario,
-      pregunta: registro.pregunta.slice(0, 2_000),
-      modo: registro.modo,
-      n_resultados: registro.n_resultados,
-      ms: Math.round(registro.ms),
-    })
-    .then(({ error }) => {
-      if (error) console.error('[bitacora] no se pudo registrar la consulta:', error.message);
-    });
+  const promesa = (async () => {
+    const { error } = await bd()
+      .from('consultas')
+      .insert({
+        usuario: registro.usuario,
+        pregunta: registro.pregunta.slice(0, 2_000),
+        modo: registro.modo,
+        n_resultados: registro.n_resultados,
+        ms: Math.round(registro.ms),
+      });
+    if (error) console.error('[bitacora] no se pudo registrar la consulta:', error.message);
+  })();
 
   const runtime = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } })
     .EdgeRuntime;
   if (runtime?.waitUntil) {
     runtime.waitUntil(promesa);
   } else {
-    promesa.catch((e) => console.error('[bitacora]', e));
+    promesa.catch((e: unknown) => console.error('[bitacora]', e));
   }
 }

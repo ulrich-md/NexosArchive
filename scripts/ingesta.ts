@@ -203,6 +203,17 @@ async function main() {
 
   await supabase.from('sync_estado').update({ actualizado_en: new Date().toISOString() }).eq('id', 1);
 
+  // La vista materializada del sidebar no se refresca sola: sin esto el
+  // sidebar carga vacío aunque la ingesta haya ido bien (ver migración 0002).
+  const { error: errorRefresco } = await supabase.rpc('refrescar_autores_conteo');
+  if (errorRefresco) {
+    console.error(`\nNo se pudo refrescar autores_conteo: ${errorRefresco.message}`);
+    console.error('El sidebar de autores va a cargar vacío. ¿Aplicaste supabase/migrations/0002?');
+    process.exitCode = 1;
+  } else {
+    console.log('Vista autores_conteo refrescada.');
+  }
+
   if (Math.abs(diferencia) > 5) {
     console.error('\n*** LA INGESTA NO CUADRA (diferencia > 5). Revisar antes de continuar. ***');
     process.exitCode = 1;

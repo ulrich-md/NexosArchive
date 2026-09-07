@@ -26,7 +26,16 @@ en menos de cinco segundos, artículos **reales** con su ficha completa y su lig
 sin que el sistema invente jamás un título, un autor o una fecha.
 ### Criterios de aceptación (esto es lo que "terminado" significa)
 - `SELECT count(*) FROM articulos` = **19,145** ± 5, reconciliado contra `X-WP-Total`.
-- Los conteos por año coinciden con la API dentro de ±2. Verificados: **1988 → 246, 1994 → 283, 2006 → 307, 2016 → 568, 2024 → 463**.
+- Los conteos por año coinciden con la API dentro de ±2, **los 49 años, no una muestra**.
+  ⚠️ Los números que traía este spec (1988 → 246, 1994 → 283, 2006 → 307) **estaban mal**:
+  salieron de consultar `after=YYYY-01-01T00:00:00`, y como `after` es EXCLUSIVO, descarta
+  todo artículo fechado exactamente a medianoche del 1 de enero — que es justo como quedó
+  migrado el archivo impreso viejo (45 artículos solo en 1988). Los valores reales son
+  **1988 → 291, 1994 → 305, 2006 → 335**; 2016 → 568 y 2024 → 463 sí eran correctos, porque
+  los posts modernos traen hora real y no medianoche exacta. Ajustar los datos para que
+  cuadraran con los números viejos habría **borrado 95 artículos reales**. `npm run verificar`
+  ya no usa constantes: le pregunta a la API año por año con la ventana correcta
+  (`after=<Y-1>-12-31T23:59:59` … `before=<Y+1>-01-01T00:00:00`).
 - Ningún título contiene `&#8211;`, `&amp;`, `&#8220;` ni ninguna otra entidad HTML.
 - Ningún artículo con `fecha_pub` anterior a 1978-01-01 salvo que se verifique a mano.
 - Las tres consultas de ejemplo de la home devuelven resultados en < 5 s.

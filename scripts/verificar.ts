@@ -7,14 +7,26 @@ import { WP_BASE, fetchJson, sleep } from './lib/wp.js';
 
 const supabase = clienteSupabase();
 
-// Verificados contra la API el 2026-09-07 (ver CLAUDE.md sección 1).
-const ANIOS_VERIFICADOS: Record<number, number> = {
-  1988: 246,
-  1994: 283,
-  2006: 307,
-  2016: 568,
-  2024: 463,
-};
+/**
+ * Conteo remoto de un año, preguntándole a la API en vivo.
+ *
+ * OJO con los límites: `after` y `before` de WordPress son EXCLUSIVOS. Usar
+ * `after=YYYY-01-01T00:00:00` descarta en silencio todo artículo fechado
+ * exactamente a medianoche del 1 de enero, que es justo como quedó migrado el
+ * archivo impreso viejo (45 artículos solo en 1988). Los números "verificados"
+ * del spec original salieron de esa consulta y por eso venían cortos; los años
+ * modernos coincidían porque sus posts traen hora real, no medianoche exacta.
+ *
+ * La ventana correcta para el año Y va del último instante de Y-1 al primero
+ * de Y+1.
+ */
+async function conteoRemotoDelAnio(anio: number): Promise<number> {
+  const desde = `${anio - 1}-12-31T23:59:59`;
+  const hasta = `${anio + 1}-01-01T00:00:00`;
+  const url = `${WP_BASE}/posts?per_page=1&_fields=id&after=${desde}&before=${hasta}`;
+  const { headers } = await fetchJson<unknown[]>(url);
+  return Number(headers.get('x-wp-total'));
+}
 
 let fallos = 0;
 
@@ -46,13 +58,35 @@ async function main() {
     `remoto=${totalRemoto} local=${totalLocal} diff=${totalRemoto - totalLocal}`,
   );
 
-  // 2. Conteos por año verificados a mano (±2)
-  for (const [anioStr, esperado] of Object.entries(ANIOS_VERIFICADOS)) {
-    const anio = Number(anioStr);
-    const n = await contar((q) => q.eq('anio_pub', anio));
-    reportar(`Conteo ${anio}`, Math.abs(n - esperado) <= 2, `esperado=${esperado} local=${n}`);
-    await sleep(50);
+  // 2. Conteos por año contra la API en vivo, TODOS los años del archivo (±2).
+  //    Se comparan contra la API y no contra constantes: una constante mal
+  //    obtenida se vuelve un criterio de aceptación equivocado, y "arreglar"
+  //    los datos para que cuadren con ella habría borrado artículos reales.
+  //    Se cuenta año por año en la base: traerse las filas y agrupar en
+  //    memoria no sirve, porque PostgREST corta la respuesta a 1000 filas.
+  const extremo = async (asc: boolean): Promise<number> => {
+    const { data, error } = await supabase
+      .from('articulos').select('anio_pub').order('anio_pub', { ascending: asc }).limit(1).single();
+    if (error) throw new Error(`Error obteniendo el rango de años: ${error.message}`);
+    return (data as { anio_pub: number }).anio_pub;
+  };
+  const anioMin = await extremo(true);
+  const anioMax = await extremo(false);
+
+  const desajustes: string[] = [];
+  let aniosRevisados = 0;
+  for (let anio = anioMin; anio <= anioMax; anio++) {
+    const local = await contar((q) => q.eq('anio_pub', anio));
+    const remoto = await conteoRemotoDelAnio(anio);
+    aniosRevisados++;
+    if (Math.abs(local - remoto) > 2) desajustes.push(`${anio}: local=${local} remoto=${remoto}`);
+    await sleep(300);
   }
+  reportar(
+    `Conteos por año (${anioMin}–${anioMax}, ${aniosRevisados} años)`,
+    desajustes.length === 0,
+    desajustes.length === 0 ? 'todos cuadran con la API (±2)' : desajustes.join(' · '),
+  );
 
   // 3. Títulos limpios: ni entidades HTML sin decodificar ni etiquetas.
   //    El 14% de los títulos de Nexos traen <em>; si sobreviven, la ficha

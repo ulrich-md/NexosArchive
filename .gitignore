@@ -7,3 +7,8 @@ logs/*.csv
 !logs/.gitkeep
 datos/
 logs/*.log
+
+# Scripts temporales de exploración en la raíz. Van aquí y no en el scratchpad
+# porque los imports de paquete (dotenv, supabase-js) solo resuelven dentro del
+# proyecto; el script que los crea los borra al terminar.
+_*.mts

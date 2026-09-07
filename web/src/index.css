@@ -1,0 +1,194 @@
+@import 'tailwindcss';
+
+/* Modo oscuro por clase `.dark` en <html>, no por media query: el toggle manda. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* =====================================================================
+   Tokens — CLAUDE.md sección 3. Valores LITERALES, no aproximados.
+   Los cuatro tokens de `.dark` que la sección 3 no lista
+   (--primary-foreground, --primary-soft, --destructive, --sidebar) se
+   toman del CSS de producción de archivonexos.online, que es la
+   referencia viva que la sección 3 declara.
+   ===================================================================== */
+:root {
+  --background: #f6f8f9;
+  --surface: #ffffff;
+  --foreground: #0c1a20;
+  --muted-foreground: #3b4e56;
+  --muted: #eef2f4;
+  --border: #dce4e7;
+  --primary: #018fbd;
+  --primary-foreground: #ffffff;
+  --primary-soft: #018fbd1a;
+  --destructive: #a33127;
+  --sidebar: #f1f4f6;
+}
+
+.dark {
+  --background: #0b1418;
+  --surface: #111e23;
+  --foreground: #e6eef1;
+  --muted-foreground: #94a8b1;
+  --muted: #16262c;
+  --border: #22343b;
+  --primary: #3cb6dc;
+  --primary-foreground: #06141a;
+  --primary-soft: #3cb6dc1f;
+  --destructive: #d98a80;
+  --sidebar: #0e191e;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-destructive: var(--destructive);
+  --color-sidebar: var(--sidebar);
+
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-serif: 'Newsreader', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+@layer base {
+  /* El sitio de referencia fija la raíz en 17px; sin esto, todo el
+     escalado tipográfico sale un 6% chico frente al original. */
+  html {
+    font-family: var(--font-sans);
+    font-size: 17px;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    line-height: 1.65;
+    margin: 0;
+  }
+
+  /* Tailwind v4 ya no aplica el color de borde por defecto. */
+  *,
+  ::after,
+  ::before {
+    border-color: var(--border);
+  }
+
+  ::selection {
+    background: var(--primary-soft);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+}
+
+/* Metadatos, cifras, IDs, contadores y la línea de ayuda del input.
+   Siempre tabular-nums (sección 3). */
+@utility mono-meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  font-size: 0.75rem;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* =====================================================================
+   Animación: mínima y funcional. Todo va bajo motion-safe:, así que
+   `prefers-reduced-motion: reduce` la desactiva por completo.
+   ===================================================================== */
+@keyframes nx-pensando {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes nx-brillo {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes nx-aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes nx-desplegar {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes nx-plegar {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@utility animar-pensando {
+  animation: nx-pensando 1.2s ease-in-out infinite;
+}
+
+@utility animar-brillo {
+  animation: nx-brillo 1.4s ease-in-out infinite;
+}
+
+@utility animar-aparecer {
+  animation: nx-aparecer 0.3s ease-out;
+}
+
+@utility animar-desplegar {
+  animation: nx-desplegar 0.2s ease-out;
+}
+
+@utility animar-plegar {
+  animation: nx-plegar 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

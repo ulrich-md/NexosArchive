@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Archivo Nexos — consulta del archivo 1978–2026</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="author" content="Nexos" />
+    <meta
+      name="description"
+      content="Herramienta interna de la redacción de Nexos para preguntarle al archivo de la revista: 19 mil artículos por tema, autor, año y número."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap"
+    />
+    <script>
+      // Aplica el tema antes del primer pintado para que no haya destello
+      // blanco al recargar en modo oscuro.
+      (function () {
+        try {
+          var guardado = localStorage.getItem('nexos-tema');
+          var oscuro =
+            guardado === 'oscuro' ||
+            (guardado === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (oscuro) document.documentElement.classList.add('dark');
+        } catch (e) {
+          /* almacenamiento bloqueado: se queda en claro */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

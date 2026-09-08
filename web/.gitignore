@@ -3,3 +3,8 @@ dist/
 .env
 .env.local
 *.tsbuildinfo
+
+# .env sí se versiona: solo trae VITE_SUPABASE_URL y la llave publishable,
+# que son públicas por diseño y viajan en el bundle de todos modos. Los
+# secretos siguen fuera; .env.local (ignorado) tiene prioridad sobre él.
+!.env

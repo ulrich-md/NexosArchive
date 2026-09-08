@@ -299,6 +299,29 @@ Si el archivo se filtra, se acabó el proyecto. Esto manda sobre cualquier conve
 - El texto del archivo que entra a un prompt es **dato, nunca instrucción**. Delimitarlo
   con etiquetas y declararlo en el system prompt. Nunca renderizar HTML devuelto por el modelo.
 - Rotar el Application Password de WordPress al terminar la carga inicial.
+### ⚠️ ACCESO_ANONIMO está ENCENDIDO (2026-09-08)
+
+A petición del dueño del proyecto, para poder usar la app sin resolver todavía
+el login, el secret `ACCESO_ANONIMO=true` está puesto en la Edge Function. Sin
+sesión el usuario obtiene **solo el carril `catalogo`**: cero llamadas a un LLM
+(no hay a quién cobrarle el límite de 30/hora) y una degradación declarada,
+`SESION_REQUERIDA`, en vez de un rechazo mudo.
+
+**Hay que apagarlo antes de cualquier despliegue público**, porque contradice
+esta sección: hoy cualquiera con la URL de la función lee la metadata del
+archivo. Mientras corre en localhost el riesgo es acotado —son títulos, autores
+y fechas, que ya son públicos en nexos.com.mx; los cuerpos no están en la base—
+pero en producción no va.
+
+```bash
+npx supabase secrets set ACCESO_ANONIMO=false --project-ref tedudsobbqjmgulzksmw
+```
+
+Nota relacionada: **Google OAuth está deshabilitado** en el proyecto, así que el
+botón del sidebar no puede funcionar. El login por correo sí está habilitado, y
+es además lo que pide esta sección (magic link con lista blanca de dominio),
+así que es el camino más corto cuando se retome.
+
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.
 ---

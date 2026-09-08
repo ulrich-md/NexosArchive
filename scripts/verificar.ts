@@ -4,8 +4,11 @@ import './lib/red.js';
 import 'dotenv/config';
 import { clienteSupabase } from './lib/supabase.js';
 import { WP_BASE, fetchJson, sleep } from './lib/wp.js';
+import { SITIOS, SUBDOMINIOS, urlApi } from './lib/sitios.js';
+import { existsSync, readFileSync } from 'node:fs';
 
 const supabase = clienteSupabase();
+const RUTA_AVANCE = 'datos/avance-subdominios.json';
 
 /**
  * Conteo remoto de un año, preguntándole a la API en vivo.
@@ -47,15 +50,49 @@ async function contar(filtro?: (q: any) => any): Promise<number> {
 async function main() {
   console.log('Archivo Nexos — verificación de ingesta\n');
 
-  // 1. Total contra X-WP-Total en vivo (±5: pueden publicarse artículos entre
-  //    la ingesta y esta corrida).
-  const probe = await fetchJson<unknown[]>(`${WP_BASE}/posts?per_page=1&_fields=id`);
-  const totalRemoto = Number(probe.headers.get('x-wp-total'));
+  // 1. Cobertura sitio por sitio contra X-WP-Total en vivo.
+  //
+  //    El archivo vive en 27 WordPress (CLAUDE.md sección 2), así que un solo
+  //    total no dice nada: los subdominios republican parte del sitio principal
+  //    y la ingesta los deduplica por título, de modo que el conteo local de un
+  //    subdominio es MENOR que su X-WP-Total y eso está bien.
+  //
+  //    Lo que sí hay que probar es que ningún artículo se perdió en silencio,
+  //    que es exactamente como falló la versión de Lovable. La igualdad que
+  //    importa es `insertados + duplicados == X-WP-Total`: prueba que la
+  //    ingesta VIO todos los artículos remotos, haya guardado o descartado cada
+  //    uno. Los insertados/duplicados salen del avance de la ingesta.
+  const avance: Record<string, { insertados: number; duplicados: number; sin_indexar?: number }> =
+    existsSync(RUTA_AVANCE) ? JSON.parse(readFileSync(RUTA_AVANCE, 'utf8')) : {};
+
   const totalLocal = await contar();
+  const huecos: string[] = [];
+  let totalRemotoTodos = 0;
+  let totalRemoto = 0; // solo www, se usa más abajo
+
+  for (const sitio of SITIOS) {
+    const probe = await fetchJson<unknown[]>(`${urlApi(sitio)}/posts?per_page=1&_fields=id`);
+    const remoto = Number(probe.headers.get('x-wp-total'));
+    totalRemotoTodos += remoto;
+    if (sitio.clave === 'www') totalRemoto = remoto;
+
+    const local = await contar((q) => q.eq('sitio', sitio.clave));
+    const est = avance[sitio.clave];
+    // www no deduplica (es la fuente); los subdominios sí.
+    const vistos = sitio.clave === 'www' ? local : (est?.insertados ?? local) + (est?.duplicados ?? 0);
+
+    if (Math.abs(remoto - vistos) > 5) {
+      huecos.push(`${sitio.clave}: remoto=${remoto} vistos=${vistos} (local=${local})`);
+    }
+    await sleep(300);
+  }
+
   reportar(
-    'Total de artículos',
-    Math.abs(totalRemoto - totalLocal) <= 5,
-    `remoto=${totalRemoto} local=${totalLocal} diff=${totalRemoto - totalLocal}`,
+    `Cobertura de los ${SITIOS.length} sitios`,
+    huecos.length === 0,
+    huecos.length === 0
+      ? `${totalRemotoTodos} artículos remotos, todos vistos; ${totalLocal} en la base tras deduplicar`
+      : huecos.join(' · '),
   );
 
   // 2. Conteos por año contra la API en vivo, TODOS los años del archivo (±2).
@@ -64,9 +101,12 @@ async function main() {
   //    los datos para que cuadren con ella habría borrado artículos reales.
   //    Se cuenta año por año en la base: traerse las filas y agrupar en
   //    memoria no sirve, porque PostgREST corta la respuesta a 1000 filas.
+  //    Se comparan solo los artículos de `www`, porque conteoRemotoDelAnio le
+  //    pregunta a www: mezclar los subdominios haría que el local sobre siempre.
   const extremo = async (asc: boolean): Promise<number> => {
     const { data, error } = await supabase
-      .from('articulos').select('anio_pub').order('anio_pub', { ascending: asc }).limit(1).single();
+      .from('articulos').select('anio_pub').eq('sitio', 'www')
+      .order('anio_pub', { ascending: asc }).limit(1).single();
     if (error) throw new Error(`Error obteniendo el rango de años: ${error.message}`);
     return (data as { anio_pub: number }).anio_pub;
   };
@@ -76,14 +116,14 @@ async function main() {
   const desajustes: string[] = [];
   let aniosRevisados = 0;
   for (let anio = anioMin; anio <= anioMax; anio++) {
-    const local = await contar((q) => q.eq('anio_pub', anio));
+    const local = await contar((q) => q.eq('anio_pub', anio).eq('sitio', 'www'));
     const remoto = await conteoRemotoDelAnio(anio);
     aniosRevisados++;
     if (Math.abs(local - remoto) > 2) desajustes.push(`${anio}: local=${local} remoto=${remoto}`);
     await sleep(300);
   }
   reportar(
-    `Conteos por año (${anioMin}–${anioMax}, ${aniosRevisados} años)`,
+    `Conteos por año de www (${anioMin}–${anioMax}, ${aniosRevisados} años)`,
     desajustes.length === 0,
     desajustes.length === 0 ? 'todos cuadran con la API (±2)' : desajustes.join(' · '),
   );
@@ -142,6 +182,31 @@ async function main() {
       'Ningún autor en forma slug',
       comoSlug.length === 0,
       comoSlug.length === 0 ? `ninguno de ${filas.length} autores` : `${comoSlug.length}, p.ej. ${comoSlug.slice(0, 3).join(', ')}`,
+    );
+  }
+
+  // 6b. El cuerpo de los subdominios se indexó (y NO se almacenó).
+  //     Es la única prueba de que el buscador puede encontrar un artículo por
+  //     lo que dice adentro; sin ella `ts` traería solo título y autores.
+  const deSubdominios = await contar((q) => q.neq('sitio', 'www'));
+  if (deSubdominios === 0) {
+    console.log('SKIP  Índice de cuerpo — todavía no hay artículos de subdominios');
+  } else {
+    const sinIndice = await contar((q) => q.neq('sitio', 'www').is('ts', null));
+    const sinCuerpo = Object.values(avance).reduce((n, e) => n + (e.sin_indexar ?? 0), 0);
+    reportar(
+      'Subdominios indexados',
+      sinIndice === 0,
+      `${deSubdominios - sinIndice}/${deSubdominios} con tsvector` +
+        (sinCuerpo > 0 ? ` · ${sinCuerpo} sin cuerpo por JSON inválido del servidor` : ''),
+    );
+
+    // El cuerpo NO debe quedar legible en la base (CLAUDE.md sección 6).
+    const conCuerpo = await contar((q) => q.not('cuerpo', 'is', null));
+    reportar(
+      'El cuerpo no se almacena',
+      conCuerpo === 0,
+      `${conCuerpo} artículos con la columna cuerpo llena`,
     );
   }
 

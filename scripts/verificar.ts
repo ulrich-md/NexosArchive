@@ -115,8 +115,17 @@ async function main() {
 
   // 6. Ningún autor guardado en forma slug: "carlos-monsivais" en vez de
   //    "Carlos Monsiváis" significa que se guardó el dato crudo de la API.
-  const { data: muestraAutores } = await supabase.from('autores_conteo').select('autor').limit(2000);
-  const filas = muestraAutores ?? [];
+  // Se paginan TODOS: PostgREST corta a 1000 y la vista viene ordenada por
+  // volumen, así que revisar solo el primer tramo dejaría fuera la cola larga,
+  // que es justo donde se escondería un nombre mal guardado.
+  const filas: { autor: string }[] = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data } = await supabase
+      .from('autores_conteo').select('autor').order('autor').range(desde, desde + 999);
+    if (!data?.length) break;
+    filas.push(...(data as { autor: string }[]));
+    if (data.length < 1000) break;
+  }
   if (filas.length === 0) {
     // Una vista vacía haría pasar esta prueba sin comprobar nada, que es peor
     // que no tenerla. Además el sidebar carga de aquí: vacía, carga en blanco.

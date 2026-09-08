@@ -22,7 +22,8 @@ import './lib/red.js';
 import 'dotenv/config';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { clienteSupabase } from './lib/supabase.js';
-import { decode, sleep } from './lib/wp.js';
+import { sleep } from './lib/wp.js';
+import { FIRMAS_NO_PERSONA, autorDesdePagina } from './lib/firma.js';
 
 const DELAY_MS = 300;
 const PAGINA_DB = 500;
@@ -33,34 +34,9 @@ const concArg = process.argv.find((a) => a.startsWith('--concurrencia='));
 /** Autorizado por el dueño del proyecto para bajar la corrida de ~6 h a ~1 h. */
 const CONCURRENCIA = concArg ? Number(concArg.split('=')[1]) : 6;
 
-/** Firmas que no son personas: usuarios del CMS o la firma institucional. */
-export const FIRMAS_NO_PERSONA = new Set(['4dm1n', 'nexos', 'Nexos', 'N/A', 'n/a', '']);
-
 const limiteArg = process.argv.find((a) => a.startsWith('--limite='));
 const LIMITE = limiteArg ? Number(limiteArg.split('=')[1]) : 0;
 const SECO = process.argv.includes('--seco');
-
-/**
- * Saca la firma del HTML del artículo. Devuelve null si la página no la trae o
- * si dice "N/A": sin nombre no hay autor, nunca se rellena el hueco.
- */
-export function autorDesdePagina(html: string): string[] {
-  const m = html.match(/<div class="el-autor">([\s\S]*?)<\/div>/i);
-  if (!m) return [];
-
-  // El marcado trae un paréntesis de afiliación que suele venir vacío:
-  // "Ulises Beltrán  (  )". Se quita cuando no tiene contenido real.
-  let texto = decode(m[1]).replace(/\(\s*\)\s*$/, '').trim();
-  if (!texto) return [];
-
-  // Varias firmas pueden venir separadas por " y " o por coma.
-  const partes = texto
-    .split(/\s+y\s+|,(?![^(]*\))/i)
-    .map((p) => p.trim())
-    .filter((p) => p && !FIRMAS_NO_PERSONA.has(p) && p.length > 2 && p.length < 120);
-
-  return [...new Set(partes)];
-}
 
 interface Fila {
   id: number;

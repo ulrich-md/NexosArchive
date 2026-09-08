@@ -121,6 +121,33 @@ como Mastretta mostraban un "silencio" de once años (1978→1989). Era el hueco
 metadata de los ochenta, no biografía. Un perfil debe hablar **del registro del
 archivo**, nunca de la vida del autor.
 
+**Los subdominios firman de tres maneras distintas, y suponer la de www inventa
+autores** (2026-09-08). La primera pasada de recuperación sobre los subdominios
+escribió 675 filas con autores que no existen y hubo que revertirlas. Las tres:
+
+1. **Enlaces `/author/{slug}/`** dentro de `.el-autor`, en 12 subdominios. Hay
+   que leer cada `<a>` por separado: el tema une dos firmas con `" and "` —en
+   inglés— y decodificar el bloque entero produce una persona inexistente
+   llamada `"Sofia Marquez and Cultura Nexos"`.
+2. **Texto plano** en `.el-autor`: es lo de www y lo de los blogs de autor.
+3. **`<span class="el--autor-header-nexos">`** dentro del `h1`: es lo de
+   `poemas`, donde `.el-autor` viene **vacío**. Sin este caso los 996 poemas del
+   archivo se quedan sin autor. `"Anónimo"` se conserva: es como el archivo
+   atribuye el poema, no un hueco que estemos rellenando.
+
+**`cultura` y `eljuegodelacorte` cuelgan la cuenta del propio blog junto al autor
+real** (`"Cultura Nexos"`, `"Juego de La Nueva Suprema Corte"`). Guardarlas
+inventaría personas con miles de artículos en el índice del sidebar.
+`npm run firmas-sitio` las deduce en vez de escribirlas a mano, por dos reglas:
+que el slug sea el del sitio, o que el nombre sea el que el blog se da en
+`/wp-json/`. El resultado se versiona en `datos/firmas-institucionales.json`
+porque es una decisión sobre quién es persona, no un caché.
+
+⚠️ **La frecuencia NO sirve para detectarlas**, aunque lo parezca: medido,
+`justicia` firma 7 de 30 en `eljuegodelacorte` y `cultura` 16 de 30, así que un
+umbral de presencia las deja pasar; y bajarlo borraría a Octavio Gómez Dantés,
+que firma los 25 artículos de `salud` porque es su blog.
+
 **Los nombres de autor no vienen con acentos en la API.** `/wp/v2/coauthors` devuelve
 `name` en forma slug (`"carlos-monsivais"`). El nombre real solo existe en la página
 pública del autor, `https://www.nexos.com.mx/author/{slug}/`, cuyo `<h1>` viene como

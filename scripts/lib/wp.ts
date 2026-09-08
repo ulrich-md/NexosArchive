@@ -58,6 +58,8 @@ export function fechaDesdeNumero(numero: string): string | null {
 interface ErrorWp extends Error {
   status?: number;
   code?: string;
+  /** El servidor respondió 200 con un cuerpo que no es JSON válido. */
+  jsonInvalido?: boolean;
 }
 
 /**
@@ -66,26 +68,39 @@ interface ErrorWp extends Error {
  */
 export async function fetchJson<T>(url: string, maxRetries = 6): Promise<{ data: T; headers: Headers }> {
   let intento = 0;
+  let largoPrevio = -1;
   for (;;) {
     const res = await fetch(url);
 
     if (res.ok) {
-      // Las respuestas grandes (una página con el cuerpo de 50 artículos pesa
-      // ~300 KB) a veces llegan cortadas y el JSON no cierra. Eso es un fallo
-      // de transporte, no de la API: se reintenta como un 5xx en vez de matar
-      // la corrida.
+      // Un 200 puede traer un cuerpo ilegible por dos razones distintas y hay
+      // que separarlas, porque una se arregla reintentando y la otra no:
+      //
+      //  - Transporte: la respuesta llegó cortada. Se reintenta como un 5xx.
+      //  - Servidor: el WordPress de Nexos emite JSON inválido. Verificado en
+      //    cultura.nexos.com.mx, offset 3950: el cuerpo de un artículo trae una
+      //    comilla sin escapar (`la práctica de "reseñar"`) y rompe el JSON.
+      //    Reintentar da byte por byte lo mismo, así que se marca el error como
+      //    `jsonInvalido` y quien llama decide (ver ingesta-subdominios.ts:
+      //    parte el lote y, en el peor caso, se queda con la metadata).
+      //
+      // La señal para distinguirlas es el tamaño: dos cuerpos idénticos no son
+      // un corte de red, son la respuesta real del servidor.
       const texto = await res.text();
       try {
         return { data: JSON.parse(texto) as T, headers: res.headers };
       } catch (e) {
-        if (intento >= maxRetries) {
+        const determinista = texto.length === largoPrevio;
+        if (determinista || intento >= maxRetries) {
           const err: ErrorWp = new Error(
             `Respuesta ilegible de ${url} (${texto.length} bytes): ${(e as Error).message}`,
           );
+          err.jsonInvalido = determinista;
           throw err;
         }
+        largoPrevio = texto.length;
         const espera = Math.min(30_000, 500 * 2 ** intento) + Math.random() * 250;
-        console.warn(`  [reintento] respuesta cortada a los ${texto.length} bytes (intento ${intento + 1}/${maxRetries}), esperando ${Math.round(espera)}ms...`);
+        console.warn(`  [reintento] JSON ilegible a los ${texto.length} bytes (intento ${intento + 1}/${maxRetries}), esperando ${Math.round(espera)}ms...`);
         await sleep(espera);
         intento++;
         continue;

@@ -30,7 +30,7 @@ import { clienteSupabase } from './lib/supabase.js';
 import { decode, esNumeroConMes, esNumeroRevista, fetchJson, sleep } from './lib/wp.js';
 import { SUBDOMINIOS, type Sitio, claveTitulo, idDeBase, urlApi } from './lib/sitios.js';
 
-const PER_PAGE = 25; // trae cuerpo: páginas chicas, las grandes llegan cortadas
+const TAM_LOTE = 25; // trae cuerpo: lotes chicos, un lote grande pesa ~500 KB
 const DELAY_MS = 300;
 const LOTE_INDICE = 25;
 const FECHA_MIN = new Date('1978-01-01T00:00:00Z');
@@ -55,13 +55,30 @@ interface PostSub {
 interface ErrorWp extends Error {
   status?: number;
   code?: string;
+  jsonInvalido?: boolean;
 }
 
-type Avance = Record<string, { ultima_pagina: number; insertados: number; duplicados: number }>;
+// El avance se guarda como `offset`, no como página: la ingesta parte los lotes
+// cuando el servidor devuelve JSON inválido, así que el tamaño no es constante.
+interface EstadoSitio {
+  offset: number;
+  insertados: number;
+  duplicados: number;
+  sin_indexar: number; // artículos guardados sin indexar el cuerpo (JSON roto)
+  ultima_pagina?: number; // formato viejo, se convierte al leer
+}
+type Avance = Record<string, EstadoSitio>;
 
 function leerAvance(): Avance {
   if (!existsSync(RUTA_AVANCE)) return {};
-  return JSON.parse(readFileSync(RUTA_AVANCE, 'utf8')) as Avance;
+  const bruto = JSON.parse(readFileSync(RUTA_AVANCE, 'utf8')) as Avance;
+  for (const estado of Object.values(bruto)) {
+    // Corridas viejas guardaban páginas de 25; se convierten a offset.
+    if (estado.offset === undefined) estado.offset = (estado.ultima_pagina ?? 0) * 25;
+    delete estado.ultima_pagina;
+    estado.sin_indexar ??= 0;
+  }
+  return bruto;
 }
 
 function guardarAvance(a: Avance): void {
@@ -109,28 +126,75 @@ function cuerpoPlano(html: string | undefined): string {
   return decode(html).slice(0, 60_000);
 }
 
+/**
+ * Trae un lote de posts por `offset`, no por página, porque el tamaño del lote
+ * cambia cuando hay que partirlo.
+ *
+ * El WordPress de Nexos a veces emite JSON inválido: una comilla sin escapar
+ * dentro del cuerpo de un artículo rompe la respuesta entera (verificado en
+ * cultura, offset 3950). Reintentar no sirve —el servidor devuelve byte por
+ * byte lo mismo— y perder 25 artículos por uno roto sería peor. Así que el lote
+ * se parte a la mitad hasta aislar al culpable, y a ese único artículo se le
+ * pide la metadata sin `content`: se conserva el texto en el archivo, se pierde
+ * solo su indexación por cuerpo, y queda contado en `sin_indexar`.
+ */
+async function traerLote(
+  sitio: Sitio,
+  offset: number,
+  tam: number,
+  estado: EstadoSitio,
+  conCuerpo = true,
+): Promise<PostSub[]> {
+  const campos = conCuerpo
+    ? 'id,date,link,title,content,categories'
+    : 'id,date,link,title,categories';
+  const url =
+    `${urlApi(sitio)}/posts?per_page=${tam}&offset=${offset}&orderby=id&order=asc&_fields=${campos}`;
+
+  try {
+    return (await fetchJson<PostSub[]>(url)).data;
+  } catch (err) {
+    const e = err as ErrorWp;
+    if (!e.jsonInvalido) throw err; // 400 = fin; red = ya reintentó fetchJson
+
+    if (tam > 1) {
+      const mitad = Math.ceil(tam / 2);
+      await sleep(DELAY_MS);
+      const a = await traerLote(sitio, offset, mitad, estado, conCuerpo);
+      if (a.length < mitad) return a; // se acabaron los posts
+      await sleep(DELAY_MS);
+      const b = await traerLote(sitio, offset + mitad, tam - mitad, estado, conCuerpo);
+      return [...a, ...b];
+    }
+
+    if (conCuerpo) {
+      console.warn(`   ⚠ ${sitio.clave} offset ${offset}: JSON inválido del servidor; se guarda sin indexar el cuerpo`);
+      estado.sin_indexar++;
+      await sleep(DELAY_MS);
+      return traerLote(sitio, offset, 1, estado, false);
+    }
+
+    throw err; // ni siquiera la metadata es legible: eso sí es un fallo
+  }
+}
+
 async function ingerirSitio(sitio: Sitio, vistos: Set<string>, avance: Avance): Promise<void> {
-  const estado = avance[sitio.clave] ?? { ultima_pagina: 0, insertados: 0, duplicados: 0 };
+  const estado: EstadoSitio =
+    avance[sitio.clave] ?? { offset: 0, insertados: 0, duplicados: 0, sin_indexar: 0 };
   const categorias = await categoriasDe(sitio);
 
   console.log(`\n── ${sitio.clave} (esperados ${sitio.esperados}, ${categorias.size} categorías)`);
-  if (estado.ultima_pagina > 0) console.log(`   reanudando desde la página ${estado.ultima_pagina + 1}`);
+  if (estado.offset > 0) console.log(`   reanudando desde el artículo ${estado.offset + 1}`);
 
-  for (let page = estado.ultima_pagina + 1; ; page++) {
-    let respuesta;
+  for (;;) {
+    let posts: PostSub[];
     try {
-      respuesta = await fetchJson<PostSub[]>(
-        `${urlApi(sitio)}/posts?per_page=${PER_PAGE}&page=${page}&orderby=id&order=asc` +
-          `&_fields=id,date,link,title,content,categories`,
-      );
+      posts = await traerLote(sitio, estado.offset, TAM_LOTE, estado);
     } catch (err) {
-      const e = err as ErrorWp;
-      if (e.status === 400 && e.code === 'rest_post_invalid_page_number') break;
-      if (e.status === 400) break;
+      if ((err as ErrorWp).status === 400) break; // rest_post_invalid_page_number: terminaste
       throw err;
     }
 
-    const posts = respuesta.data;
     if (posts.length === 0) break;
 
     const filas: Record<string, unknown>[] = [];
@@ -175,30 +239,33 @@ async function ingerirSitio(sitio: Sitio, vistos: Set<string>, avance: Avance): 
 
     if (filas.length > 0 && !SECO) {
       const { error } = await supabase.from('articulos').upsert(filas, { onConflict: 'id' });
-      if (error) throw new Error(`upsert ${sitio.clave} p${page}: ${error.message}`);
+      if (error) throw new Error(`upsert ${sitio.clave} @${estado.offset}: ${error.message}`);
 
       // El cuerpo va al índice y se descarta: nunca toca una columna.
       for (let i = 0; i < cuerpos.length; i += LOTE_INDICE) {
         const { error: errIdx } = await supabase.rpc('indexar_articulos', {
           p_filas: cuerpos.slice(i, i + LOTE_INDICE),
         });
-        if (errIdx) throw new Error(`indexar ${sitio.clave} p${page}: ${errIdx.message}`);
+        if (errIdx) throw new Error(`indexar ${sitio.clave} @${estado.offset}: ${errIdx.message}`);
       }
     }
 
+    const previo = estado.offset;
     estado.insertados += filas.length;
-    estado.ultima_pagina = page;
+    estado.offset += posts.length;
     avance[sitio.clave] = estado;
     if (!SECO) guardarAvance(avance);
 
-    if (page % 5 === 0 || posts.length < PER_PAGE) {
-      console.log(`   p${page}: +${filas.length} · acumulado ${estado.insertados} · duplicados ${estado.duplicados}`);
+    if (Math.floor(previo / 500) !== Math.floor(estado.offset / 500) || posts.length < TAM_LOTE) {
+      console.log(`   @${estado.offset}: acumulado ${estado.insertados} · duplicados ${estado.duplicados}`);
     }
-    if (posts.length < PER_PAGE) break;
+    if (posts.length < TAM_LOTE) break;
     await sleep(DELAY_MS);
   }
 
-  console.log(`   ${sitio.clave}: ${estado.insertados} nuevos, ${estado.duplicados} duplicados`);
+  avance[sitio.clave] = estado;
+  const nota = estado.sin_indexar > 0 ? `, ${estado.sin_indexar} sin indexar el cuerpo` : '';
+  console.log(`   ${sitio.clave}: ${estado.insertados} nuevos, ${estado.duplicados} duplicados${nota}`);
 }
 
 async function main() {
@@ -222,10 +289,12 @@ async function main() {
   const { count } = await supabase.from('articulos').select('*', { count: 'exact', head: true });
   const nuevos = Object.values(avance).reduce((s, e) => s + e.insertados, 0);
   const dups = Object.values(avance).reduce((s, e) => s + e.duplicados, 0);
+  const sinIdx = Object.values(avance).reduce((s, e) => s + (e.sin_indexar ?? 0), 0);
 
   console.log('\n=== RESUMEN ===');
   console.log(`Insertados desde subdominios: ${nuevos}`);
   console.log(`Duplicados omitidos:          ${dups}`);
+  console.log(`Guardados sin indexar cuerpo: ${sinIdx}  (JSON inválido del servidor)`);
   console.log(`Total en articulos:           ${count}`);
   console.log(`Avance reanudable:            ${RUTA_AVANCE}`);
 }

@@ -65,6 +65,31 @@ versión anterior de estos supuestos.**
 | Hay fechas basura que arrastran el rango a 1970 | Son **exactamente 2 posts** (ids 12920 y 12921, ambos `1970-01-01`). Los dos pertenecen al número **"2009 Febrero"**, así que su fecha real se recupera del número. |
 | Los títulos traen entidades HTML (`&#8211;`) | En la muestra revisada, **0% entidades pero 14% etiquetas HTML** (`<em>` en títulos de obras). Hay que quitar etiquetas además de decodificar entidades. |
 
+**La API oculta más de la mitad de los autores; la página del artículo sí los trae.**
+`/wp/v2/posts` deja `coauthors` vacío en el 51% del archivo, y en otra parte lo llena
+con firmas que no son personas: `nexos` y `Nexos` (la misma firma institucional
+duplicada por mayúscula) y `4dm1n`, que es un usuario del CMS. Pero la página pública
+del artículo trae la firma real en `<div class="el-autor">`. Verificado:
+`nexos.com.mx/fox-y-otras-percepciones/` sale sin autor en la API y firmado por Ulises
+Beltrán en la página. `npm run recuperar-autores` la extrae y marca
+`autor_confianza='extraido'`.
+
+Resultado medido: la cobertura de autoría pasó de **49% a 92%** (7,426 de WordPress +
+10,143 extraídos). Por década, 1988-1997 pasó de 9% a 94%.
+
+Dos reglas que salieron de conflictos reales entre las dos fuentes:
+1. **La página nunca sobrescribe un nombre que ya venía de WordPress.** En un artículo
+   WP dice "Luz Esperanza Yarsa" y la página dice "Yasna": no hay forma de saber cuál
+   es la buena sin que alguien lo revise, así que se conserva la de WP.
+2. Los títulos y las firmas se reproducen **fieles aunque traigan errores** de Nexos
+   (una página firma "Franco Basaglia Ongaro" donde la persona es Franca). Corregirlos
+   sería inventar.
+
+⚠️ Ojo al construir perfiles de autor: antes de esta recuperación, tanto Aguilar Camín
+como Mastretta mostraban un "silencio" de once años (1978→1989). Era el hueco de
+metadata de los ochenta, no biografía. Un perfil debe hablar **del registro del
+archivo**, nunca de la vida del autor.
+
 **Los nombres de autor no vienen con acentos en la API.** `/wp/v2/coauthors` devuelve
 `name` en forma slug (`"carlos-monsivais"`). El nombre real solo existe en la página
 pública del autor, `https://www.nexos.com.mx/author/{slug}/`, cuyo `<h1>` viene como

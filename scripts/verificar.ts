@@ -103,21 +103,38 @@ async function main() {
 
   // 5. Autores: que se hayan resuelto de verdad. Si `coauthors` quedó sin
   //    resolver, TODO el archivo saldría sin autor y el sidebar vacío.
-  const conAutor = await contar((q) => q.eq('autor_confianza', 'wp'));
+  const deWp = await contar((q) => q.eq('autor_confianza', 'wp'));
+  const extraidos = await contar((q) => q.eq('autor_confianza', 'extraido'));
+  const conAutor = deWp + extraidos;
   const pct = totalLocal > 0 ? Math.round((conAutor / totalLocal) * 100) : 0;
-  reportar('Artículos con autor resuelto', conAutor > 0, `${conAutor}/${totalLocal} (${pct}%)`);
+  reportar(
+    'Artículos con autor',
+    conAutor > 0,
+    `${conAutor}/${totalLocal} (${pct}%) · ${deWp} de WordPress + ${extraidos} extraídos de la página`,
+  );
 
   // 6. Ningún autor guardado en forma slug: "carlos-monsivais" en vez de
   //    "Carlos Monsiváis" significa que se guardó el dato crudo de la API.
   const { data: muestraAutores } = await supabase.from('autores_conteo').select('autor').limit(2000);
-  const comoSlug = (muestraAutores ?? [])
-    .map((r: { autor: string }) => r.autor)
-    .filter((a) => /^[a-z0-9]+(?:[-.][a-z0-9]+)+$/.test(a));
-  reportar(
-    'Ningún autor en forma slug',
-    comoSlug.length === 0,
-    comoSlug.length === 0 ? 'ninguno' : `${comoSlug.length}, p.ej. ${comoSlug.slice(0, 3).join(', ')}`,
-  );
+  const filas = muestraAutores ?? [];
+  if (filas.length === 0) {
+    // Una vista vacía haría pasar esta prueba sin comprobar nada, que es peor
+    // que no tenerla. Además el sidebar carga de aquí: vacía, carga en blanco.
+    reportar(
+      'Ningún autor en forma slug',
+      false,
+      'autores_conteo está VACÍA — falta aplicar supabase/migrations/0002 y refrescarla; el sidebar cargaría en blanco',
+    );
+  } else {
+    const comoSlug = filas
+      .map((r: { autor: string }) => r.autor)
+      .filter((a) => /^[a-z0-9]+(?:[-.][a-z0-9]+)+$/.test(a));
+    reportar(
+      'Ningún autor en forma slug',
+      comoSlug.length === 0,
+      comoSlug.length === 0 ? `ninguno de ${filas.length} autores` : `${comoSlug.length}, p.ej. ${comoSlug.slice(0, 3).join(', ')}`,
+    );
+  }
 
   // 7. sync_estado reconciliado
   const { data: estado, error: errEstado } = await supabase

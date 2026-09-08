@@ -52,28 +52,82 @@ const PATRON_LISTADO =
   /\b(todo|todos|todas|lista|listado|dame|muestrame|articulos|textos|que publico|que escribio)\b/;
 
 /**
- * Detecta autores buscando al revés: recorre los autores que EXISTEN y ve
- * cuáles caben enteros en la pregunta. Así nunca se inventa un nombre ni se le
- * reponen acentos a mano (CLAUDE.md sección 2 y sección 7).
+ * Empareja los autores que EXISTEN contra la pregunta. Se busca al revés —del
+ * catálogo hacia la pregunta— para no inventar nombres ni reponer acentos a
+ * mano (CLAUDE.md secciones 2 y 7).
+ *
+ * La regla anterior exigía que apareciera el nombre COMPLETO tal como está
+ * guardado, y por eso "todo lo de Aguilar Camín en los noventa" —el ejemplo de
+ * la sección 4— no encontraba a "Héctor Aguilar Camín": falta "Héctor". Devolvía
+ * artículos de los noventa de cualquier autor, que es peor que no devolver nada.
+ * Con "Ángeles Mastretta" funcionaba de casualidad, porque su nombre guardado
+ * son exactamente las dos palabras que uno escribe.
+ *
+ * Ahora basta con dos piezas del nombre, que es como se cita a la gente. Dos
+ * salvaguardas evitan el falso positivo que la regla estricta prevenía:
+ *
+ *  - Nunca una sola pieza: "Aguilar" no puede decidir entre Héctor Aguilar
+ *    Camín, Rubén Aguilar y Catalina Aguilar Mastretta.
+ *  - Gana el emparejamiento más específico: si la pregunta dice "Ángeles
+ *    Mastretta", Catalina Aguilar Mastretta queda descartada porque lo suyo
+ *    ("mastretta") es un subconjunto de lo de ella.
+ *
+ * Cuando dos autores empatan con las mismas piezas, se filtra por el que más
+ * publicó y los otros van en `ambiguos`, igual que hace `resolverAutor`.
  */
-export async function detectarAutoresEnPregunta(pregunta: string): Promise<AutorResuelto[]> {
-  const catalogo = await catalogoAutores();
-  if (catalogo.length === 0) return [];
-
+export function emparejarAutores(
+  catalogo: { autor: string; clave: string; n: number }[],
+  pregunta: string,
+): AutorResuelto[] {
   const enPregunta = new Set(tokens(pregunta));
   if (enPregunta.size === 0) return [];
 
-  const encontrados: AutorResuelto[] = [];
+  const candidatos: { autor: string; n: number; presentes: string[] }[] = [];
   for (const autor of catalogo) {
     const propios = tokens(autor.clave).filter((t) => t.length >= 3 && !esVacia(t));
-    // Se exigen al menos dos piezas del nombre (nombre + apellido): con una
-    // sola, cualquier palabra común dispararía un falso positivo.
-    if (propios.length < 2) continue;
-    if (!propios.every((t) => enPregunta.has(t))) continue;
-    encontrados.push({ autor: autor.autor, n: autor.n, ambiguos: [] });
+    const presentes = propios.filter((t) => enPregunta.has(t));
+    if (presentes.length < 2) continue;
+    candidatos.push({ autor: autor.autor, n: autor.n, presentes });
+  }
+  if (candidatos.length === 0) return [];
+
+  // Se descarta a quien solo coincide en un subconjunto de otro: el nombre más
+  // completo de la pregunta es el que la pregunta quiso decir.
+  const especificos = candidatos.filter((c) =>
+    !candidatos.some(
+      (otro) =>
+        otro !== c &&
+        otro.presentes.length > c.presentes.length &&
+        c.presentes.every((t) => otro.presentes.includes(t)),
+    ),
+  );
+
+  // Los que coinciden exactamente en las mismas piezas son el mismo apellido
+  // escrito por dos personas distintas: manda el de más obra, los demás se
+  // declaran ambiguos en vez de desaparecer.
+  const porFirma = new Map<string, typeof especificos>();
+  for (const c of especificos) {
+    const firma = [...c.presentes].sort().join(' ');
+    porFirma.set(firma, [...(porFirma.get(firma) ?? []), c]);
+  }
+
+  const encontrados: AutorResuelto[] = [];
+  for (const grupo of porFirma.values()) {
+    const ordenados = [...grupo].sort((a, b) => b.n - a.n);
+    encontrados.push({
+      autor: ordenados[0].autor,
+      n: ordenados[0].n,
+      ambiguos: ordenados.slice(1, 4).map((a) => a.autor),
+    });
     if (encontrados.length >= 3) break;
   }
   return encontrados;
+}
+
+export async function detectarAutoresEnPregunta(pregunta: string): Promise<AutorResuelto[]> {
+  const catalogo = await catalogoAutores();
+  if (catalogo.length === 0) return [];
+  return emparejarAutores(catalogo, pregunta);
 }
 
 /** Filtros que se leen de la pregunta sin ayuda de ningún modelo. */

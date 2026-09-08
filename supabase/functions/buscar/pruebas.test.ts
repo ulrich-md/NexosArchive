@@ -2,13 +2,17 @@
 // validación de lo que devuelve el LLM, armado de fichas y fusión RRF.
 //
 // Correr con:
-//   deno test --allow-env --allow-net supabase/functions/buscar/pruebas.test.ts
+//   deno test --allow-env supabase/functions/buscar/pruebas.test.ts
+//
+// Las aserciones son locales a propósito (`aserciones.ts`): con `jsr:@std/assert`
+// la suite no corre donde jsr.io esté bloqueado, y una suite que no corre no
+// sirve de nada.
 //
 // Deliberadamente NO hay pruebas contra la base ni contra la API de Claude:
 // esas requieren datos y llaves, y una prueba que necesita red no es una
 // prueba, es un despliegue. Lo que no se cubre aquí está anotado en index.ts.
 
-import { assert, assertEquals, assertThrows } from '@std/assert';
+import { assert, assertEquals, assertThrows } from './aserciones.ts';
 
 import {
   aniosMencionados,
@@ -25,7 +29,7 @@ import { validarClasificacion, validarRerank, validarSintesis } from './validaci
 import { literalArreglo } from './carriles/comun.ts';
 import { fusionRrf } from './carriles/hibrida.ts';
 import { normalizarPaginacion } from './carriles/catalogo.ts';
-import { decidirHeuristica } from './router.ts';
+import { decidirHeuristica, emparejarAutores } from './router.ts';
 import { temaResidual as residualDe } from './texto.ts';
 import type { FilaArticulo } from './tipos.ts';
 
@@ -226,4 +230,52 @@ Deno.test('un año suelto con verbo de listado es catálogo por publicación', (
   assert(c !== null);
   assertEquals(c!.modo, 'catalogo');
   assertEquals(c!.rango_pub, { desde: 1988, hasta: 1988 });
+});
+
+
+// --- Emparejamiento de autores ---------------------------------------------
+// Un catálogo chico pero con las trampas reales del archivo: tres apellidos
+// "Aguilar" distintos y dos "Mastretta".
+const CATALOGO = [
+  { autor: 'Héctor Aguilar Camín', clave: 'hector aguilar camin', n: 342 },
+  { autor: 'Rubén Aguilar', clave: 'ruben aguilar', n: 40 },
+  { autor: 'Catalina Aguilar Mastretta', clave: 'catalina aguilar mastretta', n: 3 },
+  { autor: 'Ángeles Mastretta', clave: 'angeles mastretta', n: 557 },
+  { autor: 'Carlos Monsiváis', clave: 'carlos monsivais', n: 120 },
+  { autor: 'La redacción', clave: 'la redaccion', n: 440 },
+];
+
+Deno.test('un autor se encuentra por sus apellidos, sin el nombre de pila', () => {
+  // El ejemplo de CLAUDE.md §4. Antes fallaba: exigía que apareciera "Héctor".
+  const r = emparejarAutores(CATALOGO, 'Todo lo de Aguilar Camín en los noventa');
+  assertEquals(r.map((a) => a.autor), ['Héctor Aguilar Camín']);
+});
+
+Deno.test('gana el emparejamiento más específico, no cualquiera que comparta apellido', () => {
+  const r = emparejarAutores(CATALOGO, 'Todo lo que publicó Ángeles Mastretta en los noventa');
+  assertEquals(r.map((a) => a.autor), ['Ángeles Mastretta']);
+});
+
+Deno.test('un solo apellido no basta: no puede decidir entre tres Aguilar', () => {
+  assertEquals(emparejarAutores(CATALOGO, 'artículos de Aguilar'), []);
+});
+
+Deno.test('el nombre completo sigue funcionando', () => {
+  const r = emparejarAutores(CATALOGO, 'textos de Carlos Monsiváis');
+  assertEquals(r.map((a) => a.autor), ['Carlos Monsiváis']);
+});
+
+Deno.test('una pregunta sin autores no inventa ninguno', () => {
+  assertEquals(emparejarAutores(CATALOGO, 'artículos de 1988 sobre fraude electoral'), []);
+});
+
+Deno.test('dos personas con las mismas piezas: manda la de más obra, la otra queda ambigua', () => {
+  const catalogo = [
+    { autor: 'Ángeles Mastretta', clave: 'angeles mastretta', n: 557 },
+    { autor: 'Otra Mastretta', clave: 'otra mastretta', n: 2 },
+    { autor: 'Ángeles Mastretta Guzmán', clave: 'angeles mastretta guzman', n: 5 },
+  ];
+  const r = emparejarAutores(catalogo, 'lo de Ángeles Mastretta');
+  assertEquals(r.length, 1);
+  assertEquals(r[0].autor, 'Ángeles Mastretta');
 });

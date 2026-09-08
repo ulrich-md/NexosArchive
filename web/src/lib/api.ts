@@ -9,6 +9,7 @@
 
 import type {
   ErrorApi,
+  PasoTraza,
   RespuestaBuscar,
   RespuestaFacetas,
   SolicitudBuscar,
@@ -104,13 +105,73 @@ async function llamar<T>(funcion: string, cuerpo: unknown, senal?: AbortSignal):
   return datos as T;
 }
 
+/** El paso del backend decide qué icono le toca en la traza. */
+const ICONO_POR_PASO: Record<string, PasoTraza['icono']> = {
+  router: 'interpretacion',
+  sql: 'consulta',
+  sintesis: 'redaccion',
+  rerank: 'orden',
+  degradacion: 'filtro',
+  aproximacion: 'lectura',
+};
+
+/**
+ * La Edge Function usa nombres propios (`resultados`, `sintesis`,
+ * `reformulacion`) y además devuelve cosas que este contrato no contempla:
+ * `degradado` cuando sirvió por otro carril, y `avisos` cuando degradó de
+ * forma declarada. Aquí se traduce a la forma que espera la interfaz y, sobre
+ * todo, NO se tiran esos mensajes: se muestran como pasos de la traza, porque
+ * son justo lo que le explica al editor por qué obtuvo lo que obtuvo.
+ */
+function deFormaBackend(d: Record<string, unknown>): Record<string, unknown> {
+  if (!('resultados' in d) && !('sintesis' in d)) return d; // ya viene en la forma esperada
+
+  const traza = Array.isArray(d.traza) ? [...(d.traza as Record<string, unknown>[])] : [];
+
+  const degradado = d.degradado as { desde: string; a: string; mensaje: string } | null;
+  if (degradado) {
+    traza.push({
+      paso: 'degradacion',
+      titulo: `Se respondió por ${degradado.a}, no por ${degradado.desde}`,
+      detalle: degradado.mensaje,
+      ms: 0,
+    });
+  }
+
+  for (const aviso of (d.avisos ?? []) as { mensaje?: string; detalle?: string }[]) {
+    if (aviso?.mensaje) {
+      traza.push({ paso: 'degradacion', titulo: aviso.mensaje, detalle: aviso.detalle ?? '', ms: 0 });
+    }
+  }
+
+  const sintesis = d.sintesis as { texto?: string } | null;
+
+  return {
+    ...d,
+    articulos: d.resultados,
+    respuesta: typeof sintesis?.texto === 'string' ? sintesis.texto : null,
+    sugerencia: d.reformulacion ?? null,
+    archivo_vacio: d.total === 0 && (d.resultados as unknown[])?.length === 0,
+    traza: traza.map((p) => ({
+      titulo: p.titulo,
+      subtitulo: null,
+      detalle: p.detalle,
+      icono: ICONO_POR_PASO[String(p.paso)] ?? null,
+      ms: p.ms,
+    })),
+  };
+}
+
 /**
  * Valida la forma de la respuesta antes de renderizarla (sección 7, regla 5).
  * Si el backend cambia el contrato, se ve como un error tipado en pantalla,
  * no como una pantalla en blanco.
  */
-function validarBuscar(datos: unknown): RespuestaBuscar {
-  const d = datos as Partial<RespuestaBuscar> | null;
+function validarBuscar(crudo: unknown): RespuestaBuscar {
+  const d = (
+    crudo && typeof crudo === 'object' ? deFormaBackend(crudo as Record<string, unknown>) : crudo
+  ) as Partial<RespuestaBuscar> | null;
+
   const modosValidos = ['panorama', 'hibrida', 'catalogo'];
   const ok =
     !!d &&
@@ -125,7 +186,7 @@ function validarBuscar(datos: unknown): RespuestaBuscar {
     throw new ErrorConsulta(
       'contrato_roto',
       'La respuesta del archivo no tiene la forma esperada.',
-      JSON.stringify(datos).slice(0, 400),
+      JSON.stringify(crudo).slice(0, 400),
     );
   }
 

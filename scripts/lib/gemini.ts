@@ -124,6 +124,32 @@ export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini>
       };
     }
 
+    // Un 429 tiene dos causas muy distintas y confundirlas cuesta caro:
+    //
+    //  - Por minuto: se pasa sola. Reintentar con backoff es exactamente lo
+    //    correcto.
+    //  - Por DÍA: no se pasa hasta mañana. Reintentar seis veces por lote, con
+    //    esperas que llegan al medio minuto, es tiempo tirado, y peor: cada
+    //    lote acaba marcado como fallido, así que el resumen final dice
+    //    "fallaron 40 lotes" cuando lo que pasó es que se acabó la cuota.
+    //
+    // El motivo viene en el cuerpo del error, en `quotaId`. Se lee y se corta
+    // la corrida con el mensaje que de verdad resuelve el problema.
+    if (res && res.status === 429) {
+      const cuerpo = await res.clone().text().catch(() => '');
+      if (/PerDay/i.test(cuerpo)) {
+        const limite = cuerpo.match(/"quotaValue":\s*"?(\d+)/)?.[1] ?? '?';
+        const err: ErrorGemini = new Error(
+          `Se agotó la cuota DIARIA de Gemini (${limite} peticiones al día, plan gratuito). ` +
+          'No se arregla esperando: hay que activar facturación en Google Cloud para el proyecto de la API key, ' +
+          'o volver mañana. Lo ya enriquecido quedó anotado y la próxima corrida sigue desde ahí.',
+        );
+        err.status = 429;
+        err.fatal = true;
+        throw err;
+      }
+    }
+
     // 400 con la llave mala, 401 y 403 no se reintentan: quemarían tiempo.
     if (res && (res.status === 401 || res.status === 403)) {
       const err: ErrorGemini = new Error(`Gemini rechazó la credencial (HTTP ${res.status}). Revisa GEMINI_API_KEY.`);
@@ -134,7 +160,9 @@ export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini>
 
     const reintentable = !res || res.status === 429 || res.status >= 500;
     if (!reintentable || intento >= maxReintentos) {
-      const detalle = res ? `${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}` : 'error de red';
+      // 300 caracteres se comían justo el `quotaId`, que es el único dato que
+      // dice qué cuota se agotó. Sin él, el error no permite decidir nada.
+      const detalle = res ? `${res.status}: ${(await res.text().catch(() => '')).slice(0, 1200)}` : 'error de red';
       const err: ErrorGemini = new Error(`Gemini falló (${detalle})`);
       err.status = res?.status;
       throw err;

@@ -128,6 +128,18 @@ pública del autor, `https://www.nexos.com.mx/author/{slug}/`, cuyo `<h1>` viene
 (sección 7), así que se recuperan de ahí. `npm run autores` construye ese mapa y lo
 cachea en `datos/autores.json`; es reanudable y tarda ~17 min.
 
+**Segunda trampa: el WordPress de Nexos emite JSON inválido.** No siempre, pero
+pasa: en `cultura.nexos.com.mx`, los artículos en las posiciones 3965 y 3996 traen
+en el cuerpo una comilla sin escapar (`la práctica de "reseñar"`) que rompe la
+respuesta entera. Se ve como una respuesta cortada y **no es un fallo de red**:
+reintentar devuelve byte por byte lo mismo. La señal para distinguirlas es el
+tamaño —dos cuerpos idénticos no son un corte de transporte—, y `fetchJson` marca
+ese caso como `jsonInvalido`. La ingesta de subdominios parte el lote a la mitad
+hasta aislar al artículo culpable y a ese le pide la metadata sin `content`: se
+conserva el artículo, se pierde solo su indexación por cuerpo, y queda contado en
+`sin_indexar`. Pedir la página completa de 25 y rendirse habría costado 25
+artículos por cada uno roto.
+
 **Trampa de entorno:** el `fetch` global de Node **no lee `HTTPS_PROXY`** (curl sí).
 Detrás de un proxy de salida obligatorio, todas las peticiones fallan con 403 sin
 explicación. `scripts/lib/red.ts` instala el `EnvHttpProxyAgent` de undici y debe

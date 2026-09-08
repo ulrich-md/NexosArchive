@@ -65,6 +65,10 @@ interface EstadoSitio {
   insertados: number;
   duplicados: number;
   sin_indexar: number; // artículos guardados sin indexar el cuerpo (JSON roto)
+  // Descartados por el propio filtro de la ingesta, con su razón. Sin esto,
+  // `insertados + duplicados` no cuadra contra X-WP-Total y la diferencia queda
+  // invisible, que es exactamente como se pierden filas sin que nadie lo note.
+  descartados?: Record<string, number>;
   ultima_pagina?: number; // formato viejo, se convierte al leer
 }
 type Avance = Record<string, EstadoSitio>;
@@ -201,8 +205,17 @@ async function ingerirSitio(sitio: Sitio, vistos: Set<string>, avance: Avance): 
     const cuerpos: { id: number; cuerpo: string }[] = [];
 
     for (const post of posts) {
+      const descarta = (razon: string) => {
+        estado.descartados ??= {};
+        estado.descartados[razon] = (estado.descartados[razon] ?? 0) + 1;
+        console.warn(`   ⚠ ${sitio.clave} id_wp ${post.id}: descartado (${razon})`);
+      };
+
       const titulo = decode(post.title?.rendered);
-      if (!titulo) continue;
+      if (!titulo) {
+        descarta('sin título');
+        continue;
+      }
 
       const clave = claveTitulo(titulo);
       if (vistos.has(clave)) {
@@ -211,7 +224,14 @@ async function ingerirSitio(sitio: Sitio, vistos: Set<string>, avance: Avance): 
       }
 
       const fecha = new Date(post.date);
-      if (Number.isNaN(fecha.getTime()) || fecha < FECHA_MIN || fecha > FECHA_MAX) continue;
+      if (Number.isNaN(fecha.getTime())) {
+        descarta('fecha ilegible');
+        continue;
+      }
+      if (fecha < FECHA_MIN || fecha > FECHA_MAX) {
+        descarta(`fecha fuera de rango (${post.date})`);
+        continue;
+      }
 
       const nombres = (post.categories ?? [])
         .map((id) => categorias.get(id))
@@ -266,8 +286,13 @@ async function ingerirSitio(sitio: Sitio, vistos: Set<string>, avance: Avance): 
   }
 
   avance[sitio.clave] = estado;
-  const nota = estado.sin_indexar > 0 ? `, ${estado.sin_indexar} sin indexar el cuerpo` : '';
-  console.log(`   ${sitio.clave}: ${estado.insertados} nuevos, ${estado.duplicados} duplicados${nota}`);
+  const notas: string[] = [];
+  if (estado.sin_indexar > 0) notas.push(`${estado.sin_indexar} sin indexar el cuerpo`);
+  for (const [razon, n] of Object.entries(estado.descartados ?? {})) notas.push(`${n} ${razon}`);
+  console.log(
+    `   ${sitio.clave}: ${estado.insertados} nuevos, ${estado.duplicados} duplicados` +
+      (notas.length ? `, ${notas.join(', ')}` : ''),
+  );
 }
 
 async function main() {

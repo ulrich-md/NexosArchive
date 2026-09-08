@@ -62,8 +62,16 @@ async function main() {
   //    importa es `insertados + duplicados == X-WP-Total`: prueba que la
   //    ingesta VIO todos los artículos remotos, haya guardado o descartado cada
   //    uno. Los insertados/duplicados salen del avance de la ingesta.
-  const avance: Record<string, { insertados: number; duplicados: number; sin_indexar?: number }> =
+  interface EstadoAvance {
+    insertados: number;
+    duplicados: number;
+    sin_indexar?: number;
+    descartados?: Record<string, number>;
+  }
+  const avance: Record<string, EstadoAvance> =
     existsSync(RUTA_AVANCE) ? JSON.parse(readFileSync(RUTA_AVANCE, 'utf8')) : {};
+  const descartadosDe = (e?: EstadoAvance) =>
+    Object.values(e?.descartados ?? {}).reduce((n, v) => n + v, 0);
 
   const totalLocal = await contar();
   const huecos: string[] = [];
@@ -79,7 +87,14 @@ async function main() {
     const local = await contar((q) => q.eq('sitio', sitio.clave));
     const est = avance[sitio.clave];
     // www no deduplica (es la fuente); los subdominios sí.
-    const vistos = sitio.clave === 'www' ? local : (est?.insertados ?? local) + (est?.duplicados ?? 0);
+    // Un artículo remoto puede acabar en tres lugares y los tres cuentan como
+    // visto: insertado, descartado por repetido, o descartado por el filtro
+    // (sin título, fecha imposible). Lo que no puede es desaparecer sin dejar
+    // rastro en ninguno de los tres.
+    const vistos =
+      sitio.clave === 'www'
+        ? local
+        : (est?.insertados ?? local) + (est?.duplicados ?? 0) + descartadosDe(est);
 
     if (Math.abs(remoto - vistos) > 5) {
       huecos.push(`${sitio.clave}: remoto=${remoto} vistos=${vistos} (local=${local})`);

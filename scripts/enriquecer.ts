@@ -369,7 +369,12 @@ function corridaEnSeco(lotes: ArticuloParaEnriquecer[][], pendientes: number): v
     entrada,
     escritura_cache: sistema,
     lectura_cache: sistema * Math.max(0, lotes.length - 1),
-    salida: pendientes * 90, // ~90 tokens por ficha catalogada
+    // Tokens de salida por ficha, medidos en corridas reales. La diferencia no
+    // es de matiz: sin cuerpo casi todos los campos vuelven vacíos, y con el
+    // texto delante el resumen sale lleno. Usar 90 para el modo con cuerpo
+    // subestimaba la corrida a la mitad, y la salida se cobra ~8x más cara que
+    // la entrada, así que ahí se decide el costo.
+    salida: pendientes * (CON_CUERPO ? 282 : 90),
   };
 
   console.log('\n=== PRUEBA EN SECO (no se llamó a la API, no se escribió nada) ===');

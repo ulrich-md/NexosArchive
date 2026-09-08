@@ -54,15 +54,26 @@ function esFichaDeLibro(texto: string): boolean {
   return /\b(19|20)\d{2}\b/.test(texto) || /\bpp?\./i.test(texto);
 }
 
-function nombresDeTexto(texto: string): string[] {
+/**
+ * Parte un bloque de firma en los nombres que contiene.
+ *
+ * Separadores: " y ", " and " y la coma. El inglés no es un descuido: Nexos
+ * republica piezas traducidas del NYT y del Financial Times conservando la
+ * firma original, y sin él quedan autores inexistentes como "By Edward Wong and
+ * Mark Landler" o "Sheryl Gay Stolberg and Helene Cooper". El "By" inicial
+ * viene de esas mismas firmas y se quita.
+ *
+ * Se exporta para poder reparar filas ya guardadas sin repetir la lógica.
+ */
+export function separarFirmas(texto: string): string[] {
   if (!texto || esFichaDeLibro(texto)) return [];
-  // Varias firmas pueden venir separadas por " y " o por coma. Las mesas
-  // redondas de Nexos llegan a traer siete firmas legítimas, así que no se
-  // limita la cantidad: se filtra por la forma de cada una.
+  // Las mesas redondas de Nexos llegan a traer siete firmas legítimas, así que
+  // no se limita la cantidad: se filtra por la forma de cada una.
   return [
     ...new Set(
       texto
-        .split(/\s+y\s+|,(?![^(]*\))/i)
+        .replace(/^\s*(by|por)\s+/i, '')
+        .split(/\s+y\s+|\s+and\s+|,(?![^(]*\))/i)
         .map((p) => p.trim())
         .filter(
           (p) =>
@@ -102,7 +113,7 @@ export function autorDesdePagina(html: string, institucionales?: Set<string>): s
     // El marcado trae un paréntesis de afiliación que suele venir vacío:
     // "Ulises Beltrán  (  )". Se quita cuando no tiene contenido real.
     const texto = decode(bloque[1]).replace(/\(\s*\)\s*$/, '').trim();
-    if (texto) return nombresDeTexto(texto);
+    if (texto) return separarFirmas(texto);
   }
 
   // poemas.nexos.com.mx: la firma vive en el h1 y `.el-autor` está vacío.
@@ -111,7 +122,7 @@ export function autorDesdePagina(html: string, institucionales?: Set<string>): s
     const texto = decode(span[1]).trim();
     // "Anónimo" se conserva: es como el archivo atribuye el poema, no un hueco
     // que estemos rellenando.
-    if (texto) return nombresDeTexto(texto);
+    if (texto) return separarFirmas(texto);
   }
 
   return [];

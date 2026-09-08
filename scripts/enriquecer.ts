@@ -1,4 +1,4 @@
-// Enriquecimiento del archivo con Claude Haiku — paso 3 del orden de trabajo
+// Enriquecimiento del archivo con Gemini — paso 3 del orden de trabajo
 // (CLAUDE.md §9). Llena los cuatro campos que la ingesta deja vacíos:
 // `resumen_linea`, `temas`, `anios_referidos` y `tipo_texto`.
 //
@@ -10,15 +10,23 @@
 // 1. Cuesta dinero real. Es reanudable de verdad: la bitácora `datos/enriquecidos.jsonl`
 //    se escribe después de CADA lote, así que una corrida interrumpida no vuelve a
 //    pagar lo ya hecho. El costo (tokens y usd) se reporta mientras corre.
-// 2. En esta fase el modelo solo ve título, autor, fecha y número — el cuerpo es
-//    fase 2. Con tan poco contexto es fácil que invente, así que los prompts le
-//    dan permiso explícito de dejar el campo vacío y toda respuesta se valida
-//    antes de tocar la base (§7). Lo que no valida se descarta y se registra.
+// 2. Cuánto ve el modelo depende del sitio, y cambia todo:
+//
+//    - En `www` (19,145 artículos) el cuerpo está tras el paywall, así que solo
+//      ve título, autor, fecha y número. Con tan poco es fácil que invente, y el
+//      resultado honesto es que la mayoría de los campos queden vacíos.
+//    - En los 26 subdominios (13,797) la API devuelve el cuerpo completo sin
+//      credenciales. Con `--con-cuerpo` se pide al vuelo, se manda el principio
+//      del texto y el resumen deja de adivinarse desde el título.
+//
+//    En los dos casos toda respuesta se valida antes de tocar la base (§7): lo
+//    que no valida se descarta y se registra.
 // 3. Un fallo no puede matar la corrida: reintento con backoff, y un lote que
 //    falla se anota y se sigue.
 //
 // Uso:
-//   npm run enriquecer                    # todo lo pendiente
+//   npm run enriquecer -- --con-cuerpo    # subdominios, leyendo el texto real
+//   npm run enriquecer                    # todo lo pendiente, solo con metadata
 //   npm run enriquecer -- --limite=200    # prueba barata sobre 200 artículos
 //   npm run enriquecer -- --seco          # sin llamar a la API: estima costo
 import './lib/red.js';
@@ -29,10 +37,11 @@ import { llamarGemini, type ErrorGemini } from './lib/gemini.js';
 import { RUTA_AVANCE, anotarAvance, leerAvance, type EstadoEnriquecimiento } from './lib/avance-enriquecimiento.js';
 import {
   type ArticuloParaEnriquecer, type Descarte, type Enriquecimiento, type Uso,
-  HERRAMIENTA, MODELO_POR_DEFECTO, SYSTEM_PROMPT,
+  HERRAMIENTA, MODELO_POR_DEFECTO, systemPromptPara,
   armarMensaje, costoUsd, enriquecimientoVacio, estaVacio, estimarTokens,
   hayTarifa, sinMaterial, sumarUso, usoVacio, validarRespuesta,
 } from './lib/enriquecimiento.js';
+import { traerCuerpos } from './lib/cuerpos.js';
 
 const PAGINA_DB = 500;          // filas que se traen de Supabase por vuelta
 const REINTENTOS_API = 6;
@@ -55,7 +64,19 @@ function argNumero(nombre: string, porDefecto: number): number {
   return Math.floor(n);
 }
 
-const TAM_LOTE = argNumero('lote', 20);
+/**
+ * Leer el cuerpo real en vez de adivinar desde el título. Solo sirve para los
+ * subdominios, así que la bandera además acota la corrida a ellos: pedirle el
+ * cuerpo a www devolvería vacío 19,145 veces.
+ */
+const CON_CUERPO = process.argv.includes('--con-cuerpo');
+
+/** Cuántos caracteres del cuerpo se mandan. Es la palanca de costo de la corrida. */
+const CUERPO_CHARS = argNumero('cuerpo-chars', 3000);
+
+// Con cuerpo, un lote de 20 son ~60k caracteres: se baja para que la respuesta
+// no se trunque y para que un lote fallido cueste menos.
+const TAM_LOTE = argNumero('lote', CON_CUERPO ? 10 : 20);
 const CONCURRENCIA = argNumero('concurrencia', 3);
 const LIMITE = argNumero('limite', 0);
 const SECO = process.argv.includes('--seco');
@@ -72,6 +93,8 @@ let totalSinMaterial = 0;
 let totalDescartes = 0;
 let totalLotesFallidos = 0;
 let totalArticulosPerdidos = 0;
+let totalConCuerpo = 0;
+let totalSinCuerpo = 0;
 let llamadas = 0;
 const inicio = Date.now();
 
@@ -104,7 +127,7 @@ async function llamarModelo(lote: ArticuloParaEnriquecer[]): Promise<RespuestaLo
 
   const respuesta = await llamarGemini({
     modelo: MODELO,
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: systemPromptPara(lote.some((a) => a.cuerpo)),
     mensaje: armarMensaje(lote),
     esquema: HERRAMIENTA.input_schema,
     maxTokens: Math.min(16_000, 350 * lote.length + 1_000),
@@ -164,6 +187,14 @@ async function procesarLote(lote: ArticuloParaEnriquecer[], profundidad = 0): Pr
     }
   }
   if (conMaterial.length === 0) return { enriquecimientos, descartes: [], perdidos: 0 };
+
+  // El cuerpo se pide una sola vez por lote: al partirlo por truncamiento, las
+  // mitades ya lo traen puesto.
+  if (CON_CUERPO && profundidad === 0) {
+    const puestos = await ponerCuerpos(conMaterial);
+    totalConCuerpo += puestos;
+    totalSinCuerpo += conMaterial.length - puestos;
+  }
 
   let respuesta: RespuestaLote;
   try {
@@ -236,31 +267,67 @@ interface FilaArticulo {
   fecha_pub: string;
   numero: string | null;
   seccion: string | null;
+  sitio: string;
+  id_wp: number;
 }
+
+/** El origen de cada artículo, para poder ir por su cuerpo. No entra al prompt. */
+const ORIGEN = new Map<number, { sitio: string; id_wp: number }>();
 
 /**
  * Pendientes por paginación de llave (`id > cursor`), no por offset: la corrida
  * va modificando justo las filas que filtra, y un offset se desalinearía.
  */
 async function traerPendientes(supabase: Supabase, cursor: number): Promise<ArticuloParaEnriquecer[]> {
-  const { data, error } = await supabase
+  let q = supabase
     .from('articulos')
-    .select('id,titulo,autores,fecha_pub,numero,seccion')
+    .select('id,titulo,autores,fecha_pub,numero,seccion,sitio,id_wp')
     .is('resumen_linea', null)
-    .gt('id', cursor)
-    .order('id', { ascending: true })
-    .limit(PAGINA_DB);
+    .gt('id', cursor);
 
+  // --con-cuerpo solo tiene sentido donde hay cuerpo que leer: en www la API
+  // devuelve `content` vacío por el paywall.
+  if (CON_CUERPO) q = q.neq('sitio', 'www');
+
+  const { data, error } = await q.order('id', { ascending: true }).limit(PAGINA_DB);
   if (error) throw new Error(`Error leyendo articulos pendientes: ${error.message}`);
 
-  return (data ?? []).map((f: FilaArticulo) => ({
-    id: f.id,
-    titulo: f.titulo ?? '',
-    autores: f.autores ?? [],
-    fecha_pub: f.fecha_pub,
-    numero: f.numero,
-    seccion: f.seccion,
-  }));
+  return (data ?? []).map((f: FilaArticulo) => {
+    ORIGEN.set(f.id, { sitio: f.sitio, id_wp: f.id_wp });
+    return {
+      id: f.id,
+      titulo: f.titulo ?? '',
+      autores: f.autores ?? [],
+      fecha_pub: f.fecha_pub,
+      numero: f.numero,
+      seccion: f.seccion,
+    };
+  });
+}
+
+/**
+ * Le pega el cuerpo a cada artículo del lote, justo antes de mandarlo. Se pide
+ * al vuelo y se descarta con el lote: nunca se guarda (CLAUDE.md §6).
+ *
+ * Si un cuerpo no llega, el artículo va con su metadata y ya: vale más un
+ * resumen pobre que un lote perdido.
+ */
+async function ponerCuerpos(lote: ArticuloParaEnriquecer[]): Promise<number> {
+  const origenes = lote
+    .map((a) => ({ id: a.id, ...(ORIGEN.get(a.id) ?? { sitio: 'www', id_wp: 0 }) }))
+    .filter((o) => o.sitio !== 'www' && o.id_wp > 0);
+  if (origenes.length === 0) return 0;
+
+  const cuerpos = await traerCuerpos(origenes, CUERPO_CHARS);
+  let puestos = 0;
+  for (const a of lote) {
+    const cuerpo = cuerpos.get(a.id);
+    if (cuerpo) {
+      a.cuerpo = cuerpo;
+      puestos++;
+    }
+  }
+  return puestos;
 }
 
 function partirEnLotes<T>(items: T[], tam: number): T[][] {
@@ -289,9 +356,13 @@ function reportarProgreso(pendientesInicio: number): void {
 // --- Corrida en seco --------------------------------------------------------
 
 function corridaEnSeco(lotes: ArticuloParaEnriquecer[][], pendientes: number): void {
-  const sistema = estimarTokens(SYSTEM_PROMPT) + estimarTokens(JSON.stringify(HERRAMIENTA));
+  const sistema =
+    estimarTokens(systemPromptPara(CON_CUERPO)) + estimarTokens(JSON.stringify(HERRAMIENTA));
   let entrada = 0;
   for (const lote of lotes) entrada += estimarTokens(armarMensaje(lote));
+  // En seco no se pide ningún cuerpo, así que se suma lo que ocuparían. Es la
+  // parte grande de la cuenta: sin esto la estimación sale ~5 veces por debajo.
+  if (CON_CUERPO) entrada += pendientes * estimarTokens('x'.repeat(CUERPO_CHARS));
 
   // A partir de la segunda llamada el prefijo se sirve de cache (0.1x).
   const estimado: Uso = {
@@ -303,6 +374,7 @@ function corridaEnSeco(lotes: ArticuloParaEnriquecer[][], pendientes: number): v
 
   console.log('\n=== PRUEBA EN SECO (no se llamó a la API, no se escribió nada) ===');
   console.log(`Modelo:                  ${MODELO}`);
+  console.log(`Fuente:                  ${CON_CUERPO ? `metadata + ${CUERPO_CHARS} caracteres de cuerpo` : 'solo metadata (el cuerpo de www está tras el paywall)'}`);
   console.log(`Artículos pendientes:    ${pendientes}`);
   console.log(`Lotes de ${TAM_LOTE}:${' '.repeat(Math.max(1, 14 - String(TAM_LOTE).length))}${lotes.length}`);
   console.log(`Tokens de entrada (est): ${estimado.entrada + estimado.escritura_cache + estimado.lectura_cache}`);
@@ -318,8 +390,13 @@ function corridaEnSeco(lotes: ArticuloParaEnriquecer[][], pendientes: number): v
 // --- Main -------------------------------------------------------------------
 
 async function main() {
-  console.log('Archivo Nexos — enriquecimiento con Claude (fase 3)\n');
+  console.log('Archivo Nexos — enriquecimiento con Gemini (paso 3)\n');
   console.log(`Modelo: ${MODELO} · lote ${TAM_LOTE} · concurrencia ${CONCURRENCIA}${SECO ? ' · MODO SECO' : ''}`);
+  console.log(
+    CON_CUERPO
+      ? `Leyendo el cuerpo real de los subdominios (${CUERPO_CHARS} caracteres por artículo).`
+      : 'Solo metadata. Para leer el texto real de los subdominios: --con-cuerpo',
+  );
   if (!hayTarifa(MODELO)) {
     console.warn(`Aviso: no hay tarifa publicada en el script para "${MODELO}"; el costo se estima con la de ${MODELO_POR_DEFECTO}.`);
   }
@@ -425,7 +502,11 @@ async function main() {
 
   console.log('\n=== ENRIQUECIMIENTO ===');
   console.log(`Artículos catalogados:        ${totalEscritos}`);
-  console.log(`  de ellos vacíos (el título no sostenía nada): ${totalVacios}`);
+  console.log(`  de ellos vacíos (no había de dónde sostenerlos): ${totalVacios}`);
+  if (CON_CUERPO) {
+    console.log(`  leídos con su cuerpo real:  ${totalConCuerpo}`);
+    console.log(`  solo con metadata:          ${totalSinCuerpo}  (su API no devolvió cuerpo)`);
+  }
   console.log(`Sin título utilizable:        ${totalSinMaterial}`);
   console.log(`Artículos no catalogados:     ${totalArticulosPerdidos}  (se reintentan en la próxima corrida)`);
   console.log(`Lotes fallidos:               ${totalLotesFallidos}  (ver ${LOG_LOTES_FALLIDOS})`);

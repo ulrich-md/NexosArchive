@@ -98,7 +98,8 @@ export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini>
   // gemini-3.6-flash y gemini-flash-lite-latest devuelven 400 con él, y los
   // otros cuatro lo aceptan. Se aprende del rechazo en vez de mantener una
   // lista escrita a mano, que envejece cada vez que Google publica un modelo.
-  let cuerpo = armarCuerpo(!op.pensar && !SIN_THINKING.has(op.modelo));
+  let conThinking = !op.pensar && !SIN_THINKING.has(op.modelo);
+  let cuerpo = armarCuerpo(conThinking);
 
   let intento = 0;
   for (;;) {
@@ -164,10 +165,18 @@ export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini>
     }
 
     // Un 400 con thinkingConfig puesto casi siempre es ese: se reintenta sin él
-    // una vez y se anota el modelo, para no repetir el viaje en las demás llamadas.
-    if (res && res.status === 400 && !SIN_THINKING.has(op.modelo) && !op.pensar) {
-      SIN_THINKING.add(op.modelo);
-      console.warn(`  [modelo] ${op.modelo} no acepta thinkingConfig; se reintenta sin él.`);
+    // y se anota el modelo, para no repetir el viaje en las demás llamadas.
+    //
+    // La condición mira si ESTA petición lo llevaba, no si el proceso ya lo
+    // aprendió: con dos trabajadores en paralelo, el segundo sale con el cuerpo
+    // ya armado antes de que el primero apunte el modelo, y preguntando por el
+    // conjunto se quedaba sin reintento y perdía su lote de 150 artículos.
+    if (res && res.status === 400 && conThinking) {
+      if (!SIN_THINKING.has(op.modelo)) {
+        SIN_THINKING.add(op.modelo);
+        console.warn(`  [modelo] ${op.modelo} no acepta thinkingConfig; se reintenta sin él.`);
+      }
+      conThinking = false;
       cuerpo = armarCuerpo(false);
       continue;
     }

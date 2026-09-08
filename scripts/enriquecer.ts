@@ -270,6 +270,18 @@ async function procesarLote(lote: ArticuloParaEnriquecer[], profundidad = 0): Pr
     const puestos = await ponerCuerpos(conMaterial);
     totalConCuerpo += puestos;
     totalSinCuerpo += conMaterial.length - puestos;
+
+    // Si se pidió leer el cuerpo y no llegó NINGUNO, el camino del cuerpo está
+    // roto y seguir solo quema cuota produciendo resúmenes vacíos. Se corta la
+    // corrida: es preferible a catalogar mal 13,797 artículos en silencio.
+    if (puestos === 0) {
+      const err: ErrorFatal = new Error(
+        `Se pidió --con-cuerpo y no llegó el cuerpo de ninguno de los ${conMaterial.length} artículos del lote. ` +
+        'Revisa el aviso de arriba: sin cuerpo, el catálogo sale casi todo vacío y la cuota se gasta igual.',
+      );
+      err.fatal = true;
+      throw err;
+    }
   }
 
   let respuesta: RespuestaLote;

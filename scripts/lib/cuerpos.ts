@@ -14,6 +14,14 @@ import { decode, fetchJson, sleep } from './wp.js';
 
 const DELAY_MS = 300;
 
+/**
+ * Tope duro de WordPress: `per_page` tiene que estar entre 1 y 100, y pedir más
+ * devuelve 400 con `rest_invalid_param`. No es un detalle: con lotes de 150 la
+ * petición de cuerpos fallaba entera y el enriquecimiento seguía con metadata
+ * sola, produciendo resúmenes vacíos y quemando cuota, sin que nada lo dijera.
+ */
+const MAX_POR_PETICION = 100;
+
 const POR_CLAVE = new Map(SITIOS.map((s) => [s.clave, s]));
 
 export interface ArticuloConCuerpo {
@@ -47,6 +55,16 @@ async function cuerposDeUnSitio(
   const mapa = new Map<number, string>();
   if (idsWp.length === 0) return mapa;
 
+  // Se parte en tandas de 100 antes de pedir nada: pasarse es un 400 seguro.
+  if (idsWp.length > MAX_POR_PETICION) {
+    for (let i = 0; i < idsWp.length; i += MAX_POR_PETICION) {
+      const tanda = await cuerposDeUnSitio(sitio, idsWp.slice(i, i + MAX_POR_PETICION), maxChars);
+      for (const [k, v] of tanda) mapa.set(k, v);
+      await sleep(DELAY_MS);
+    }
+    return mapa;
+  }
+
   const url =
     `${urlApi(sitio)}/posts?include=${idsWp.join(',')}&per_page=${idsWp.length}&_fields=id,content`;
 
@@ -60,7 +78,9 @@ async function cuerposDeUnSitio(
   } catch (err) {
     const e = err as ErrorWp;
     if (!e.jsonInvalido || idsWp.length === 1) {
-      // Sin cuerpo se sigue: el artículo se cataloga con su metadata y ya.
+      // Sin cuerpo se sigue, pero se dice: un fallo mudo aquí degrada la corrida
+      // entera a metadata sin que nadie lo note.
+      console.warn(`   ⚠ ${sitio.clave}: no se pudo traer el cuerpo de ${idsWp.length} artículo(s): ${e.message.slice(0, 160)}`);
       return mapa;
     }
     const mitad = Math.ceil(idsWp.length / 2);

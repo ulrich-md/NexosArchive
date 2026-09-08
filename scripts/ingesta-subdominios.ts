@@ -232,8 +232,10 @@ async function ingerirSitio(sitio: Sitio, vistos: Set<string>, avance: Avance): 
         seccion: nombres.find((n) => !esNumeroRevista(n)) ?? null,
       });
 
-      const cuerpo = cuerpoPlano(post.content?.rendered);
-      if (cuerpo) cuerpos.push({ id, cuerpo });
+      // Se indexa SIEMPRE, aunque el cuerpo venga vacío o el JSON del servidor
+      // lo haya dejado fuera: sin esta llamada `ts` queda NULL y el artículo no
+      // aparece ni buscándolo por su título.
+      cuerpos.push({ id, cuerpo: cuerpoPlano(post.content?.rendered) });
       vistos.add(clave);
     }
 
@@ -285,6 +287,23 @@ async function main() {
   for (const sitio of objetivo) {
     await ingerirSitio(sitio, vistos, avance);
   }
+
+  // Cierre: nada puede quedar sin índice. Un artículo con `ts` NULL no aparece
+  // ni buscándolo por su título, así que los que se quedaron fuera —cuerpo
+  // vacío, o JSON roto del servidor— se indexan aquí con lo que sí se tiene.
+  let reindexados = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from('articulos').select('id').is('ts', null).limit(500);
+    if (error) throw new Error(`Error buscando artículos sin índice: ${error.message}`);
+    if (!data?.length) break;
+    const { error: errIdx } = await supabase.rpc('indexar_articulos', {
+      p_filas: (data as { id: number }[]).map((f) => ({ id: f.id, cuerpo: '' })),
+    });
+    if (errIdx) throw new Error(`Error indexando el cierre: ${errIdx.message}`);
+    reindexados += data.length;
+  }
+  if (reindexados > 0) console.log(`\nIndexados sin cuerpo al cierre: ${reindexados}`);
 
   const { count } = await supabase.from('articulos').select('*', { count: 'exact', head: true });
   const nuevos = Object.values(avance).reduce((s, e) => s + e.insertados, 0);

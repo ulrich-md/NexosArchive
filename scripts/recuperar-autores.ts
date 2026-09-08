@@ -46,6 +46,27 @@ function leerInstitucionales(): Map<string, Set<string>> {
   return mapa;
 }
 
+/**
+ * Reintenta una escritura a Supabase. Una corrida dura ~1 h y un `fetch failed`
+ * transitorio no puede tirarla entera: la primera vez murió a los 400 artículos
+ * por eso, perdiendo el resto del trabajo pendiente de esa pasada.
+ */
+async function conReintento(qué: string, fn: () => PromiseLike<{ error: unknown }>): Promise<void> {
+  for (let intento = 0; ; intento++) {
+    let err: unknown = null;
+    try {
+      ({ error: err } = await fn());
+    } catch (e) {
+      err = e;
+    }
+    if (!err) return;
+    if (intento >= 4) throw new Error(`${qué}: ${(err as Error).message ?? String(err)}`);
+    const espera = Math.min(15_000, 500 * 2 ** intento) + Math.random() * 250;
+    console.warn(`  [reintento] ${qué} (${intento + 1}/4), esperando ${Math.round(espera)}ms...`);
+    await sleep(espera);
+  }
+}
+
 /** El subdominio de la URL del artículo: es la clave del sitio. */
 function sitioDeUrl(url: string): string {
   try {
@@ -120,9 +141,9 @@ async function main() {
       if (reales.length !== (fila.autores ?? []).length) {
         limpiados++;
         if (!SECO) {
-          const { error } = await supabase
-            .from('articulos').update({ autores: reales }).eq('id', fila.id);
-          if (error) throw new Error(`Error limpiando firmas de ${fila.id}: ${error.message}`);
+          await conReintento(`limpiando firmas de ${fila.id}`, () =>
+            supabase.from('articulos').update({ autores: reales }).eq('id', fila.id),
+          );
         }
       }
       // Tiene autor real de WP: no se toca. La página no manda sobre WordPress
@@ -194,11 +215,12 @@ async function main() {
         if (autores.length > 0) {
           recuperados++;
           appendFileSync(LOG, JSON.stringify({ id: fila.id, antes: fila.autores, ahora: autores, url: fila.url }) + '\n');
-          const { error } = await supabase
-            .from('articulos')
-            .update({ autores, autor_confianza: 'extraido' })
-            .eq('id', fila.id);
-          if (error) throw new Error(`Error guardando el autor de ${fila.id}: ${error.message}`);
+          await conReintento(`guardando el autor de ${fila.id}`, () =>
+            supabase
+              .from('articulos')
+              .update({ autores, autor_confianza: 'extraido' })
+              .eq('id', fila.id),
+          );
         } else {
           // La página existe y no trae firma: no hay autor que recuperar. Se
           // anota para que una corrida futura no vuelva a pedir esta página.

@@ -50,6 +50,37 @@ Base: `https://www.nexos.com.mx/wp-json/wp/v2/`
 - **El cuerpo del artículo está tras el paywall.** Sin autenticar, `content` y `excerpt` vienen **vacíos** y `class_list` incluye `access-restricted` / `membership-content`.
 - `/wp/v2/users` → **401**, y `_embed=author` devuelve `rest_user_invalid_id`.
 
+### ⚠️ EL ARCHIVO NO ESTÁ EN UN SOLO SITIO: son 27 WordPress (2026-09-08)
+
+`www.nexos.com.mx` tiene 19,145 artículos, pero **Nexos publica además en 26
+subdominios**, cada uno con su propio WordPress y su propia API. Verificado:
+
+| | artículos |
+|---|---|
+| www.nexos.com.mx | 19,145 |
+| **26 subdominios** | **14,479** |
+| **TOTAL** | **33,624** |
+
+Los más grandes: `cultura` (4,216), `redaccion` (2,129), `eljuegodelacorte`
+(2,098), `poemas` (996), `educacion` (617), `jorgegcastaneda` (563),
+`angelesmastretta` (557), `economia` (522), `seguridad` (455), `josewoldenberg`
+(449), `anticorrupcion` (426), `aguilarcamin` (342), `federalismo` (331).
+
+**Y esto resuelve el problema del contenido:** la API de los subdominios
+devuelve `content.rendered` COMPLETO, sin paywall y sin credenciales (medido:
+entre 718 y 15,748 caracteres). El paywall solo cubre el archivo viejo del
+sitio principal.
+
+Dos cosas que hay que resolver antes de ingerirlos:
+
+1. **Los ids chocan.** Cada WordPress tiene su propio espacio de ids, así que
+   `id` de WordPress ya no identifica un artículo: la identidad real es
+   `(sitio, id_wp)`. La regla del spec "nunca generar un id propio" se escribió
+   suponiendo un solo sitio.
+2. **Hay duplicación parcial y desigual.** Medido sobre 12 títulos de cada uno:
+   `angelesmastretta` 10/12 ya estaban en la base, pero `aguilarcamin` y
+   `redaccion` 0/12. Hay que deduplicar por título o por slug, nunca por id.
+
 ### Corrección del spec — reconocimiento contra la API en vivo (2026-09-07)
 
 Varias afirmaciones del spec original resultaron falsas al contrastarlas con la API.

@@ -70,8 +70,26 @@ export async function fetchJson<T>(url: string, maxRetries = 6): Promise<{ data:
     const res = await fetch(url);
 
     if (res.ok) {
-      const data = (await res.json()) as T;
-      return { data, headers: res.headers };
+      // Las respuestas grandes (una página con el cuerpo de 50 artículos pesa
+      // ~300 KB) a veces llegan cortadas y el JSON no cierra. Eso es un fallo
+      // de transporte, no de la API: se reintenta como un 5xx en vez de matar
+      // la corrida.
+      const texto = await res.text();
+      try {
+        return { data: JSON.parse(texto) as T, headers: res.headers };
+      } catch (e) {
+        if (intento >= maxRetries) {
+          const err: ErrorWp = new Error(
+            `Respuesta ilegible de ${url} (${texto.length} bytes): ${(e as Error).message}`,
+          );
+          throw err;
+        }
+        const espera = Math.min(30_000, 500 * 2 ** intento) + Math.random() * 250;
+        console.warn(`  [reintento] respuesta cortada a los ${texto.length} bytes (intento ${intento + 1}/${maxRetries}), esperando ${Math.round(espera)}ms...`);
+        await sleep(espera);
+        intento++;
+        continue;
+      }
     }
 
     if (res.status === 400) {

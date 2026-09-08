@@ -30,7 +30,7 @@ import { clienteSupabase } from './lib/supabase.js';
 import { decode, esNumeroConMes, esNumeroRevista, fetchJson, sleep } from './lib/wp.js';
 import { SUBDOMINIOS, type Sitio, claveTitulo, idDeBase, urlApi } from './lib/sitios.js';
 
-const PER_PAGE = 50; // trae cuerpo: páginas más chicas para no armar respuestas enormes
+const PER_PAGE = 25; // trae cuerpo: páginas chicas, las grandes llegan cortadas
 const DELAY_MS = 300;
 const LOTE_INDICE = 25;
 const FECHA_MIN = new Date('1978-01-01T00:00:00Z');

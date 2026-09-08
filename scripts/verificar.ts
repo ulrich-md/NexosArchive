@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const supabase = clienteSupabase();
 const RUTA_AVANCE = 'datos/avance-subdominios.json';
+const RUTA_FIRMAS = 'datos/firmas-institucionales.json';
 
 /**
  * Conteo remoto de un año, preguntándole a la API en vivo.
@@ -222,6 +223,40 @@ async function main() {
       'El cuerpo no se almacena',
       conCuerpo === 0,
       `${conCuerpo} artículos con la columna cuerpo llena`,
+    );
+  }
+
+  // 6c. Ningún autor puede ser la cuenta del propio blog, ni dos firmas unidas
+  //     en una sola. Las dos cosas pasaron de verdad: la primera pasada de
+  //     recuperación sobre los subdominios guardó "Cultura Nexos" como si fuera
+  //     una persona y creó una llamada "Sofia Marquez and Cultura Nexos".
+  //     Un autor inventado es un incidente de credibilidad para Nexos
+  //     (CLAUDE.md §7), así que se comprueba, no se confía.
+  const nombresAutores = filas.map((r) => r.autor);
+  if (nombresAutores.length > 0) {
+    const institucionales = new Set<string>();
+    if (existsSync(RUTA_FIRMAS)) {
+      const bruto = JSON.parse(readFileSync(RUTA_FIRMAS, 'utf8')) as Record<string, { nombre: string }[]>;
+      for (const cuentas of Object.values(bruto)) for (const c of cuentas) institucionales.add(c.nombre);
+    }
+    const colados = nombresAutores.filter((a) => institucionales.has(a));
+    reportar(
+      'Ninguna cuenta de blog como autor',
+      colados.length === 0,
+      institucionales.size === 0
+        ? `sin ${RUTA_FIRMAS}: corre \`npm run firmas-sitio\``
+        : colados.length === 0
+          ? `ninguna de las ${institucionales.size} conocidas`
+          : colados.join(', '),
+    );
+
+    // " and " en español no une dos firmas: si aparece, el bloque de autoría se
+    // decodificó entero en vez de leer cada enlace por separado.
+    const unidos = nombresAutores.filter((a) => /\s+and\s+/i.test(a));
+    reportar(
+      'Ningún autor con dos firmas unidas',
+      unidos.length === 0,
+      unidos.length === 0 ? 'ninguno' : `${unidos.length}, p.ej. ${unidos.slice(0, 3).join(' · ')}`,
     );
   }
 

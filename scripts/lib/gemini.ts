@@ -68,6 +68,9 @@ export interface OpcionesGemini {
   alReintentar?: (status: number | string, intento: number, esperaMs: number) => void;
 }
 
+/** Modelos que rechazan `thinkingConfig`. Se llena solo, al primer 400. */
+const SIN_THINKING = new Set<string>();
+
 /** Una llamada con salida estructurada, con reintento y backoff en 429/5xx. */
 export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini> {
   const llave = process.env.GEMINI_API_KEY;
@@ -78,7 +81,7 @@ export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini>
   }
 
   const maxReintentos = op.maxReintentos ?? 6;
-  const cuerpo = {
+  const armarCuerpo = (conThinking: boolean) => ({
     systemInstruction: { parts: [{ text: op.systemPrompt }] },
     contents: [{ role: 'user', parts: [{ text: op.mensaje }] }],
     generationConfig: {
@@ -86,9 +89,16 @@ export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini>
       responseSchema: aEsquemaGemini(op.esquema),
       temperature: 0,
       maxOutputTokens: op.maxTokens,
-      ...(op.pensar ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
+      ...(conThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
     },
-  };
+  });
+
+  // Apagar el pensamiento ahorra tokens de salida, que se cobran caros, pero no
+  // todos los modelos aceptan `thinkingConfig`: medido, gemini-3.5-flash-lite,
+  // gemini-3.6-flash y gemini-flash-lite-latest devuelven 400 con él, y los
+  // otros cuatro lo aceptan. Se aprende del rechazo en vez de mantener una
+  // lista escrita a mano, que envejece cada vez que Google publica un modelo.
+  let cuerpo = armarCuerpo(!op.pensar && !SIN_THINKING.has(op.modelo));
 
   let intento = 0;
   for (;;) {
@@ -151,6 +161,15 @@ export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini>
         err.fatal = true;
         throw err;
       }
+    }
+
+    // Un 400 con thinkingConfig puesto casi siempre es ese: se reintenta sin él
+    // una vez y se anota el modelo, para no repetir el viaje en las demás llamadas.
+    if (res && res.status === 400 && !SIN_THINKING.has(op.modelo) && !op.pensar) {
+      SIN_THINKING.add(op.modelo);
+      console.warn(`  [modelo] ${op.modelo} no acepta thinkingConfig; se reintenta sin él.`);
+      cuerpo = armarCuerpo(false);
+      continue;
     }
 
     // 400 con la llave mala, 401 y 403 no se reintentan: quemarían tiempo.

@@ -423,7 +423,7 @@ async function traerPendientes(supabase: Supabase, cursor: number): Promise<Arti
 async function ponerCuerpos(lote: ArticuloParaEnriquecer[]): Promise<number> {
   const origenes = lote
     .map((a) => ({ id: a.id, ...(ORIGEN.get(a.id) ?? { sitio: 'www', id_wp: 0 }) }))
-    .filter((o) => o.sitio !== 'www' && o.id_wp > 0);
+    .filter((o) => o.id_wp > 0);
   if (origenes.length === 0) return 0;
 
   const cuerpos = await traerCuerpos(origenes, CUERPO_CHARS);
@@ -508,8 +508,9 @@ async function main() {
   console.log(`Lote ${TAM_LOTE} · concurrencia ${CONCURRENCIA}${SECO ? ' · MODO SECO' : ''}`);
   console.log(
     CON_CUERPO
-      ? `Leyendo el cuerpo real de los subdominios (${CUERPO_CHARS} caracteres por artículo).`
-      : 'Solo metadata. Para leer el texto real de los subdominios: --con-cuerpo',
+      ? `Leyendo el cuerpo real de los artículos (${CUERPO_CHARS} caracteres por artículo)` +
+        (SOLO_CON_CUERPO ? ', saltando los que el paywall tape.' : '.')
+      : 'Solo metadata. Para leer el texto real: --con-cuerpo',
   );
   if (!hayTarifa(MODELO)) {
     console.warn(`Aviso: no hay tarifa publicada en el script para "${MODELO}"; el costo se estima con la de ${MODELO_POR_DEFECTO}.`);

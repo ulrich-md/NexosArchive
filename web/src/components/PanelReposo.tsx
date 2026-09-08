@@ -6,10 +6,11 @@ import { conMiles, saludo } from '@/lib/utilidades';
 /**
  * Estado de reposo del panel principal (sección 3).
  *
- * El subtítulo dice `1978–2026 · 19,145 textos`: rango y conteo verificados
- * contra `X-WP-Total`. Si el backend reporta un total distinto —porque la
- * ingesta va a medias— manda el real: decir 19,145 con la base incompleta
- * sería repetir exactamente la mentira de la versión de Lovable.
+ * El subtítulo dice `1978–2026 · 32,942 textos`: rango y conteo verificados
+ * contra la ingesta reconciliada de los 27 WordPress de Nexos. Si el backend
+ * reporta un total distinto —porque la ingesta va a medias— manda el real:
+ * decir una cifra redonda con la base incompleta sería repetir exactamente la
+ * mentira de la versión de Lovable.
  */
 export function PanelReposo({
   facetas,

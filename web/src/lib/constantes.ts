@@ -1,15 +1,19 @@
 import type { Modo } from './contrato';
 
 /**
- * Cifras verificadas contra `X-WP-Total` el 2026-09-07 (CLAUDE.md secciones
- * 1 y 2). Son el objetivo de la ingesta, no datos de ejemplo: el subtítulo
- * solo las usa mientras `facetas` no haya respondido. En cuanto el backend
- * reporta un total real, manda el real — decir "19,145" con 12,000 filas
- * cargadas sería repetir la mentira de la versión de Lovable.
+ * Cifras verificadas contra la ingesta reconciliada de los 27 WordPress de
+ * Nexos (CLAUDE.md secciones 1 y 2). No son datos de ejemplo: el subtítulo solo
+ * las usa mientras `facetas` no haya respondido, y en cuanto el backend reporta
+ * un total real, manda el real — decir una cifra redonda con la base a medias
+ * sería repetir la mentira de la versión de Lovable.
+ *
+ * 32,942 es el total tras deduplicar, no los 33,624 artículos remotos: los
+ * subdominios republican 681 textos que ya están en el sitio principal, y
+ * contarlos dos veces le prometería al editor 681 artículos que no existen.
  */
 export const ANIO_INICIAL = 1978;
 export const ANIO_FINAL = 2026;
-export const TOTAL_ESPERADO = 19145;
+export const TOTAL_ESPERADO = 32942;
 
 export const LINEA_AYUDA = `Solo responde con lo que existe en el archivo de la revista, ${ANIO_INICIAL}–${ANIO_FINAL}`;
 

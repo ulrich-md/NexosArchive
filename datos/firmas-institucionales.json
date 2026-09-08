@@ -1,0 +1,38 @@
+{
+  "cultura": [
+    {
+      "slug": "cultura",
+      "nombre": "Cultura Nexos",
+      "apariciones": 16,
+      "acompanada": 16,
+      "razon": "slug del propio sitio"
+    }
+  ],
+  "eljuegodelacorte": [
+    {
+      "slug": "justicia",
+      "nombre": "Juego de La Nueva Suprema Corte",
+      "apariciones": 7,
+      "acompanada": 7,
+      "razon": "se llama como el blog (\"El Juego de la Nueva Suprema Corte\")"
+    }
+  ],
+  "educacion": [
+    {
+      "slug": "educacion",
+      "nombre": "Distancia por tiempos",
+      "apariciones": 1,
+      "acompanada": 0,
+      "razon": "slug del propio sitio"
+    }
+  ],
+  "seguridad": [
+    {
+      "slug": "seguridad",
+      "nombre": "Caminos sin ley",
+      "apariciones": 12,
+      "acompanada": 12,
+      "razon": "slug del propio sitio"
+    }
+  ]
+}

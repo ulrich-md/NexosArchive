@@ -6,6 +6,11 @@ logs/*.jsonl
 logs/*.csv
 !logs/.gitkeep
 datos/
+# Excepción: este sí se versiona. Registra qué firmas se decidió que NO son
+# personas ("Cultura Nexos", "Juego de La Nueva Suprema Corte"). Es una decisión
+# sobre el archivo, no un caché: si se pierde, la siguiente corrida vuelve a
+# meter las cuentas de los blogs al índice de autores sin que nadie lo note.
+!datos/firmas-institucionales.json
 logs/*.log
 
 # Scripts temporales de exploración en la raíz. Van aquí y no en el scratchpad

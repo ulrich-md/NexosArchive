@@ -25,6 +25,37 @@ import { clienteSupabase } from './lib/supabase.js';
 import { sleep } from './lib/wp.js';
 import { FIRMAS_NO_PERSONA, autorDesdePagina } from './lib/firma.js';
 
+/**
+ * Cuentas del propio blog que el tema de algunos subdominios cuelga junto al
+ * autor real ("Cultura Nexos", "Juego de La Nueva Suprema Corte"). Las deduce
+ * `npm run firmas-sitio`; si el archivo no está, la recuperación corre igual
+ * pero esas cuentas entrarían al índice de autores como si fueran personas.
+ */
+const RUTA_FIRMAS = 'datos/firmas-institucionales.json';
+
+function leerInstitucionales(): Map<string, Set<string>> {
+  const mapa = new Map<string, Set<string>>();
+  if (!existsSync(RUTA_FIRMAS)) {
+    console.warn(`⚠ No existe ${RUTA_FIRMAS}: corre \`npm run firmas-sitio\` antes, o las cuentas de los blogs entrarán como autores.\n`);
+    return mapa;
+  }
+  const bruto = JSON.parse(readFileSync(RUTA_FIRMAS, 'utf8')) as Record<string, { slug: string; nombre: string }[]>;
+  for (const [sitio, cuentas] of Object.entries(bruto)) {
+    mapa.set(sitio, new Set(cuentas.map((c) => c.slug)));
+  }
+  return mapa;
+}
+
+/** El subdominio de la URL del artículo: es la clave del sitio. */
+function sitioDeUrl(url: string): string {
+  try {
+    const host = new URL(url).hostname;
+    return host.replace(/\.nexos\.com\.mx$/, '');
+  } catch {
+    return 'www';
+  }
+}
+
 const DELAY_MS = 300;
 const PAGINA_DB = 500;
 const LOG = 'logs/autores-recuperados.jsonl';
@@ -53,6 +84,7 @@ function realesDeWp(autores: string[]): string[] {
 async function main() {
   mkdirSync('logs', { recursive: true });
   const supabase = clienteSupabase();
+  const institucionales = leerInstitucionales();
 
   console.log('Archivo Nexos — recuperación de autores desde la página pública\n');
 
@@ -158,7 +190,7 @@ async function main() {
       if (!html) {
         fallos++;
       } else {
-        const autores = autorDesdePagina(html);
+        const autores = autorDesdePagina(html, institucionales.get(sitioDeUrl(fila.url)));
         if (autores.length > 0) {
           recuperados++;
           appendFileSync(LOG, JSON.stringify({ id: fila.id, antes: fila.autores, ahora: autores, url: fila.url }) + '\n');

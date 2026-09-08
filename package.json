@@ -11,7 +11,8 @@
     "recuperar-autores": "tsx scripts/recuperar-autores.ts",
     "enriquecer": "tsx scripts/enriquecer.ts",
     "verificar": "tsx scripts/verificar.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "firmas-sitio": "tsx scripts/firmas-de-sitio.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

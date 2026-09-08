@@ -29,6 +29,20 @@
 //   npm run enriquecer                    # todo lo pendiente, solo con metadata
 //   npm run enriquecer -- --limite=200    # prueba barata sobre 200 artículos
 //   npm run enriquecer -- --seco          # sin llamar a la API: estima costo
+//   npm run enriquecer -- --con-cuerpo --lote=150 --modelos=a,b,c   # gratis
+//
+// CÓMO SALE GRATIS. El plan sin facturación de Gemini da 20 peticiones al día,
+// pero el 429 dice `GenerateRequestsPerDayPerProjectPerModel-FreeTier`: la cuota
+// es por proyecto Y POR MODELO. Y cuenta PETICIONES, no tokens. De ahí las dos
+// palancas, que se multiplican:
+//
+//   - Lotes grandes. 150 artículos por petición caben de sobra (medido: 100
+//     artículos son 73k tokens de entrada y 16k de salida, contra un límite de
+//     1M y 65k). Los 13,797 subdominios pasan de 1,380 peticiones a ~92.
+//   - Varios modelos. Siete modelos flash disponibles dan 140 peticiones al día.
+//
+//   92 peticiones contra 140 de cupo: la corrida completa cabe en un día y no
+//   cuesta nada. Con facturación activa son ~$10 y un par de horas.
 import './lib/red.js';
 import 'dotenv/config';
 import { appendFileSync, mkdirSync } from 'node:fs';
@@ -80,9 +94,31 @@ const TAM_LOTE = argNumero('lote', CON_CUERPO ? 10 : 20);
 const CONCURRENCIA = argNumero('concurrencia', 3);
 const LIMITE = argNumero('limite', 0);
 const SECO = process.argv.includes('--seco');
-const MODELO = process.argv.find((a) => a.startsWith('--modelo='))?.split('=')[1]
-  ?? process.env.GEMINI_MODELO_ENRIQUECIMIENTO
-  ?? MODELO_POR_DEFECTO;
+/**
+ * Modelos a usar, en orden. La cuota gratuita de Gemini es de 20 peticiones al
+ * día POR PROYECTO Y POR MODELO (lo dice el `quotaId` del 429:
+ * GenerateRequestsPerDayPerProjectPerModel-FreeTier), así que cada modelo trae
+ * su propio cupo. Con siete modelos disponibles el cupo del día se multiplica
+ * por siete sin pagar nada.
+ *
+ * Cuando uno agota su cuota diaria se marca y se pasa al siguiente; la corrida
+ * solo se detiene cuando se acabaron todos.
+ */
+const MODELOS: string[] = (
+  process.argv.find((a) => a.startsWith('--modelos='))?.split('=')[1] ??
+  process.argv.find((a) => a.startsWith('--modelo='))?.split('=')[1] ??
+  process.env.GEMINI_MODELO_ENRIQUECIMIENTO ??
+  MODELO_POR_DEFECTO
+).split(',').map((m) => m.trim()).filter(Boolean);
+
+/** El primero de la lista: se usa para estimar costo y para los mensajes. */
+const MODELO = MODELOS[0];
+
+const agotados = new Set<string>();
+
+function modeloDisponible(): string | null {
+  return MODELOS.find((m) => !agotados.has(m)) ?? null;
+}
 
 // --- Estado global de la corrida --------------------------------------------
 
@@ -96,6 +132,7 @@ let totalArticulosPerdidos = 0;
 let totalConCuerpo = 0;
 let totalSinCuerpo = 0;
 let llamadas = 0;
+const llamadasPorModelo = new Map<string, number>();
 const inicio = Date.now();
 
 interface ErrorFatal extends Error { fatal?: true }
@@ -125,12 +162,50 @@ interface RespuestaLote {
 async function llamarModelo(lote: ArticuloParaEnriquecer[]): Promise<RespuestaLote> {
   if (SECO) throw new Error('llamarModelo en modo --seco');
 
+  // Se reintenta con el siguiente modelo mientras queden: la cuota agotada de
+  // uno no dice nada de la de los demás.
+  for (;;) {
+    try {
+      return await unaLlamada(lote);
+    } catch (err) {
+      const e = err as ErrorGemini;
+      if (!e.cuotaDiaria) throw err;
+      const gastado = MODELOS.find((m) => !agotados.has(m));
+      if (gastado) {
+        agotados.add(gastado);
+        const quedan = MODELOS.filter((m) => !agotados.has(m));
+        console.warn(
+          `  [cuota] ${gastado} agotó su cupo del día. ` +
+          (quedan.length > 0 ? `Sigo con ${quedan[0]} (quedan ${quedan.length}).` : 'No quedan modelos.'),
+        );
+      }
+      if (modeloDisponible() === null) throw err;
+    }
+  }
+}
+
+async function unaLlamada(lote: ArticuloParaEnriquecer[]): Promise<RespuestaLote> {
+  const modelo = modeloDisponible();
+  if (modelo === null) {
+    const err: ErrorFatal = new Error(
+      `Se agotó la cuota diaria de los ${MODELOS.length} modelos (${MODELOS.join(', ')}). ` +
+      'Vuelve mañana —la cuota gratuita se renueva— o activa facturación en Google Cloud ' +
+      'para el proyecto de la API key. Lo ya enriquecido quedó anotado y la próxima corrida sigue desde ahí.',
+    );
+    err.fatal = true;
+    throw err;
+  }
+
   const respuesta = await llamarGemini({
-    modelo: MODELO,
+    modelo,
     systemPrompt: systemPromptPara(lote.some((a) => a.cuerpo)),
     mensaje: armarMensaje(lote),
     esquema: HERRAMIENTA.input_schema,
-    maxTokens: Math.min(16_000, 350 * lote.length + 1_000),
+    // El tope viejo de 16,000 hacía que cualquier lote de más de ~45 artículos
+    // llegara truncado, y con la cuota contada por PETICIÓN el lote grande es
+    // justo la palanca que la hace gratis. 60,000 deja margen bajo el límite de
+    // salida de estos modelos, que es 65,536.
+    maxTokens: Math.min(60_000, 350 * lote.length + 1_000),
     // Sin pensamiento: es extracción, no razonamiento, y esos tokens se cobran
     // como salida (medido: 552 de razonamiento sobre 360 de respuesta).
     pensar: false,
@@ -140,6 +215,7 @@ async function llamarModelo(lote: ArticuloParaEnriquecer[]): Promise<RespuestaLo
   });
 
   llamadas++;
+  llamadasPorModelo.set(modelo, (llamadasPorModelo.get(modelo) ?? 0) + 1);
   return {
     bruto: respuesta.bruto,
     uso: {
@@ -396,7 +472,8 @@ function corridaEnSeco(lotes: ArticuloParaEnriquecer[][], pendientes: number): v
 
 async function main() {
   console.log('Archivo Nexos — enriquecimiento con Gemini (paso 3)\n');
-  console.log(`Modelo: ${MODELO} · lote ${TAM_LOTE} · concurrencia ${CONCURRENCIA}${SECO ? ' · MODO SECO' : ''}`);
+  console.log(`Modelos: ${MODELOS.join(', ')}`);
+  console.log(`Lote ${TAM_LOTE} · concurrencia ${CONCURRENCIA}${SECO ? ' · MODO SECO' : ''}`);
   console.log(
     CON_CUERPO
       ? `Leyendo el cuerpo real de los subdominios (${CUERPO_CHARS} caracteres por artículo).`
@@ -517,6 +594,14 @@ async function main() {
   console.log(`Lotes fallidos:               ${totalLotesFallidos}  (ver ${LOG_LOTES_FALLIDOS})`);
   console.log(`Campos descartados por validación: ${totalDescartes}  (ver ${LOG_DESCARTES})`);
   console.log(`Llamadas al modelo:           ${llamadas}`);
+  if (MODELOS.length > 1) {
+    for (const m of MODELOS) {
+      const n = llamadasPorModelo.get(m) ?? 0;
+      if (n > 0 || agotados.has(m)) {
+        console.log(`  ${m.padEnd(26)} ${String(n).padStart(4)}${agotados.has(m) ? '  (cuota del día agotada)' : ''}`);
+      }
+    }
+  }
   console.log(`Tokens entrada/salida:        ${uso.entrada + uso.escritura_cache + uso.lectura_cache} / ${uso.salida}`);
   console.log(`  cache escrito/leído:        ${uso.escritura_cache} / ${uso.lectura_cache}`);
   console.log(`Costo de esta corrida:        ${usd(gastado)}`);

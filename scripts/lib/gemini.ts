@@ -29,6 +29,8 @@ export interface RespuestaGemini {
 export interface ErrorGemini extends Error {
   status?: number;
   fatal?: boolean;
+  /** Se agotó la cuota del DÍA de este modelo. Otro modelo puede seguir. */
+  cuotaDiaria?: boolean;
 }
 
 /**
@@ -140,11 +142,12 @@ export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini>
       if (/PerDay/i.test(cuerpo)) {
         const limite = cuerpo.match(/"quotaValue":\s*"?(\d+)/)?.[1] ?? '?';
         const err: ErrorGemini = new Error(
-          `Se agotó la cuota DIARIA de Gemini (${limite} peticiones al día, plan gratuito). ` +
-          'No se arregla esperando: hay que activar facturación en Google Cloud para el proyecto de la API key, ' +
-          'o volver mañana. Lo ya enriquecido quedó anotado y la próxima corrida sigue desde ahí.',
+          `Se agotó la cuota DIARIA de ${op.modelo} (${limite} peticiones al día, plan gratuito).`,
         );
         err.status = 429;
+        err.cuotaDiaria = true;
+        // Fatal para quien use un solo modelo; quien tenga varios lo atrapa por
+        // `cuotaDiaria` y rota, porque la cuota es por proyecto Y POR MODELO.
         err.fatal = true;
         throw err;
       }

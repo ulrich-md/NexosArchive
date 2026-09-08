@@ -50,14 +50,17 @@ export interface Uso {
   lectura_cache: number;
 }
 
-// CLAUDE.md §8: Haiku para el enriquecimiento masivo.
-export const MODELO_POR_DEFECTO = 'claude-haiku-4-5';
+// El proyecto usa Gemini (decisión del dueño, por costo), no Claude como
+// decía la sección 8 original del spec.
+export const MODELO_POR_DEFECTO = 'gemini-2.5-flash';
 
-// USD por millón de tokens. Cache de escritura = 1.25x entrada, lectura = 0.1x.
+// USD por millón de tokens. OJO: estas tarifas NO están verificadas contra la
+// lista de precios de Google — ai.google.dev está bloqueado por el proxy de
+// salida de este entorno. Sirven para dimensionar la corrida, no para
+// presupuestar. Confírmalas antes de tomar una decisión de dinero.
 const TARIFAS: Record<string, { entrada: number; salida: number }> = {
-  'claude-haiku-4-5': { entrada: 1, salida: 5 },
-  'claude-sonnet-5': { entrada: 2, salida: 10 },
-  'claude-opus-5': { entrada: 5, salida: 25 },
+  'gemini-2.5-flash': { entrada: 0.3, salida: 2.5 },
+  'gemini-2.5-pro': { entrada: 1.25, salida: 10 },
 };
 
 export function hayTarifa(modelo: string): boolean {
@@ -170,11 +173,22 @@ como lo que es: un título.
 CAMPOS
 
 1. resumen_linea
-   Una sola oración de máximo 200 caracteres que diga de qué trata el texto SEGÚN SU
-   TÍTULO. Reformula el título en una oración legible; no agregues nada que el título
-   no anuncie. No menciones al autor, la fecha ni la sección. Si el título es opaco
-   —"Cartas", "Nota de la redacción", "Sin título", una sola palabra, un nombre propio
-   suelto— devuelve "".
+   Escríbelo SOLO si aporta algo que el título no dice ya con claridad. En la mayoría
+   de los casos la respuesta correcta es "".
+
+   Quien lo va a leer es un editor de Nexos recorriendo una lista de resultados, y ahí
+   un resumen que repite el título con otras palabras es peor que nada: ocupa espacio,
+   parece información y no lo es. "Regreso a la utopía natal" NO necesita el resumen
+   "Sobre el regreso a la utopía natal"; devuelve "" y ya.
+
+   Sirve cuando el título esconde el asunto y tú puedes desplegarlo sin inventar:
+   - el título es una cita, un juego de palabras o una metáfora
+   - el título comprime datos que conviene explicitar (autor y obra reseñada, un rango
+     de años, un nombre propio que el propio título aclara)
+
+   Una oración, máximo 200 caracteres. Nunca agregues información que el título no
+   anuncie: no has leído el artículo, solo su ficha. No menciones al autor, la fecha ni
+   la sección.
 
 2. temas
    De 0 a 5 etiquetas temáticas, en minúsculas, sustantivos comunes, tomadas de lo que
@@ -203,9 +217,21 @@ CAMPOS
 EJEMPLOS
 
 Título: "La caída del sistema: el fraude electoral de 1988"
--> resumen_linea: "Sobre el fraude electoral de 1988 y la llamada caída del sistema."
+-> resumen_linea: ""            <- el título ya lo dice todo; parafrasearlo sería ruido
    temas: ["fraude electoral", "elecciones"]
    anios_referidos: [{anio:1988, cita:"de 1988"}]
+   tipo_texto: "desconocido"
+
+Título: "Romana Falcón: El agrarismo en Veracruz. La etapa radical (1928-1935)"
+-> resumen_linea: "Reseña del libro de Romana Falcón sobre la etapa radical del agrarismo veracruzano."
+   temas: ["agrarismo"]         <- aquí SÍ aporta: el título comprime autor, obra y periodo
+   anios_referidos: [{anio:1928, cita:"(1928-1935)"}, {anio:1935, cita:"(1928-1935)"}]
+   tipo_texto: "reseña"
+
+Título: "Regreso a la utopía natal"
+-> resumen_linea: ""            <- "Sobre el regreso a la utopía natal" no agrega nada
+   temas: ["utopía"]
+   anios_referidos: []
    tipo_texto: "desconocido"
 
 Título: "Cartas"
@@ -239,7 +265,8 @@ export const HERRAMIENTA = {
             id: { type: 'integer', description: 'El id tal cual se recibió.' },
             resumen_linea: {
               type: 'string',
-              description: 'Una oración de máximo 200 caracteres, o "" si el título es opaco.',
+              description:
+                'Una oración de máximo 200 caracteres SOLO si aporta algo que el título no dice ya. "" en caso contrario, que será lo más común.',
             },
             temas: {
               type: 'array',

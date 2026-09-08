@@ -24,8 +24,8 @@
 import './lib/red.js';
 import 'dotenv/config';
 import { appendFileSync, mkdirSync } from 'node:fs';
-import Anthropic from '@anthropic-ai/sdk';
 import { clienteSupabase } from './lib/supabase.js';
+import { llamarGemini, type ErrorGemini } from './lib/gemini.js';
 import { RUTA_AVANCE, anotarAvance, leerAvance, type EstadoEnriquecimiento } from './lib/avance-enriquecimiento.js';
 import {
   type ArticuloParaEnriquecer, type Descarte, type Enriquecimiento, type Uso,
@@ -60,7 +60,7 @@ const CONCURRENCIA = argNumero('concurrencia', 3);
 const LIMITE = argNumero('limite', 0);
 const SECO = process.argv.includes('--seco');
 const MODELO = process.argv.find((a) => a.startsWith('--modelo='))?.split('=')[1]
-  ?? process.env.ANTHROPIC_MODELO_ENRIQUECIMIENTO
+  ?? process.env.GEMINI_MODELO_ENRIQUECIMIENTO
   ?? MODELO_POR_DEFECTO;
 
 // --- Estado global de la corrida --------------------------------------------
@@ -87,29 +87,12 @@ function usd(n: number): string {
 
 // --- Llamada al modelo ------------------------------------------------------
 
-const cliente = SECO ? null : new Anthropic({ maxRetries: 0 }); // el reintento es nuestro
-
 interface RespuestaLote {
   bruto: unknown;
   uso: Uso;
   truncada: boolean;
 }
 
-function usoDesde(u: Anthropic.Usage): Uso {
-  return {
-    entrada: u.input_tokens ?? 0,
-    salida: u.output_tokens ?? 0,
-    escritura_cache: u.cache_creation_input_tokens ?? 0,
-    lectura_cache: u.cache_read_input_tokens ?? 0,
-  };
-}
-
-function esperaDeRateLimit(err: unknown): number | null {
-  const cabeceras = (err as { headers?: Headers }).headers;
-  const valor = cabeceras?.get?.('retry-after');
-  const segundos = valor ? Number(valor) : NaN;
-  return Number.isFinite(segundos) ? Math.min(60_000, segundos * 1000) : null;
-}
 
 /**
  * Una llamada por lote, con reintento y backoff exponencial en 429/5xx/red.
@@ -117,53 +100,34 @@ function esperaDeRateLimit(err: unknown): number | null {
  * cualquier otro error se propaga para que el lote se registre y la corrida siga.
  */
 async function llamarModelo(lote: ArticuloParaEnriquecer[]): Promise<RespuestaLote> {
-  if (!cliente) throw new Error('llamarModelo en modo --seco');
+  if (SECO) throw new Error('llamarModelo en modo --seco');
 
-  const maxTokens = Math.min(16_000, 350 * lote.length + 1_000);
-  let intento = 0;
+  const respuesta = await llamarGemini({
+    modelo: MODELO,
+    systemPrompt: SYSTEM_PROMPT,
+    mensaje: armarMensaje(lote),
+    esquema: HERRAMIENTA.input_schema,
+    maxTokens: Math.min(16_000, 350 * lote.length + 1_000),
+    // Sin pensamiento: es extracción, no razonamiento, y esos tokens se cobran
+    // como salida (medido: 552 de razonamiento sobre 360 de respuesta).
+    pensar: false,
+    maxReintentos: REINTENTOS_API,
+    alReintentar: (status, intento, espera) =>
+      console.warn(`  [reintento] ${status} (intento ${intento}/${REINTENTOS_API}), esperando ${Math.round(espera)}ms...`),
+  });
 
-  for (;;) {
-    try {
-      const respuesta = await cliente.messages.create({
-        model: MODELO,
-        max_tokens: maxTokens,
-        temperature: 0,
-        // El system prompt y la herramienta son idénticos en toda la corrida:
-        // con cache el prefijo se cobra a 0.1x a partir de la segunda llamada.
-        system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-        tools: [HERRAMIENTA as Anthropic.Tool],
-        tool_choice: { type: 'tool', name: HERRAMIENTA.name },
-        messages: [{ role: 'user', content: armarMensaje(lote) }],
-      });
-
-      llamadas++;
-      const bloque = respuesta.content.find((b) => b.type === 'tool_use');
-      return {
-        bruto: bloque ? bloque.input : null,
-        uso: usoDesde(respuesta.usage),
-        truncada: respuesta.stop_reason === 'max_tokens',
-      };
-    } catch (err) {
-      if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-        const fatal: ErrorFatal = new Error(`La API rechazó la credencial (HTTP ${err.status}). Revisa ANTHROPIC_API_KEY.`);
-        fatal.fatal = true;
-        throw fatal;
-      }
-
-      const status = err instanceof Anthropic.APIError ? err.status : undefined;
-      const reintentable =
-        err instanceof Anthropic.APIConnectionError ||
-        err instanceof Anthropic.RateLimitError ||
-        (typeof status === 'number' && status >= 500);
-
-      if (!reintentable || intento >= REINTENTOS_API) throw err;
-
-      const espera = esperaDeRateLimit(err) ?? Math.min(60_000, 1_000 * 2 ** intento) + Math.random() * 500;
-      console.warn(`  [reintento] ${status ?? 'red'} (intento ${intento + 1}/${REINTENTOS_API}), esperando ${Math.round(espera)}ms...`);
-      await sleep(espera);
-      intento++;
-    }
-  }
+  llamadas++;
+  return {
+    bruto: respuesta.bruto,
+    uso: {
+      entrada: respuesta.uso.entrada,
+      // El pensamiento se factura como salida; si va apagado esto es 0.
+      salida: respuesta.uso.salida + respuesta.uso.pensamiento,
+      escritura_cache: 0,
+      lectura_cache: respuesta.uso.cacheado,
+    },
+    truncada: respuesta.truncada,
+  };
 }
 
 // --- Proceso de un lote -----------------------------------------------------
@@ -359,8 +323,8 @@ async function main() {
   if (!hayTarifa(MODELO)) {
     console.warn(`Aviso: no hay tarifa publicada en el script para "${MODELO}"; el costo se estima con la de ${MODELO_POR_DEFECTO}.`);
   }
-  if (!SECO && !process.env.ANTHROPIC_API_KEY) {
-    console.error('Falta ANTHROPIC_API_KEY en el entorno. Copia .env.example a .env y complétalo.');
+  if (!SECO && !process.env.GEMINI_API_KEY) {
+    console.error('Falta GEMINI_API_KEY en el entorno. Copia .env.example a .env y complétalo.');
     console.error('Para estimar el costo sin llamar a la API: npm run enriquecer -- --seco');
     process.exit(1);
   }

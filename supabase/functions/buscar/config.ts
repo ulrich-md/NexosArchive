@@ -39,15 +39,18 @@ export function obligatorio(nombre: string): string {
 export const supabaseUrl = () => obligatorio('SUPABASE_URL');
 export const supabaseServiceRole = () => obligatorio('SUPABASE_SERVICE_ROLE_KEY');
 
-// --- Anthropic --------------------------------------------------------------
-export const anthropicApiKey = () => env('ANTHROPIC_API_KEY');
+// --- Gemini -----------------------------------------------------------------
+// El proyecto usa Gemini (decisión del dueño, por costo), no Claude como decía
+// la sección 8 original del spec.
+export const geminiApiKey = () => env('GEMINI_API_KEY');
 
 /** Router: barato y rápido (CLAUDE.md sección 8). */
-export const MODELO_ROUTER = env('MODELO_ROUTER') ?? 'claude-haiku-4-5';
-/** Redacción de la síntesis del modo panorama. */
-export const MODELO_SINTESIS = env('MODELO_SINTESIS') ?? 'claude-sonnet-5';
+export const MODELO_ROUTER = env('MODELO_ROUTER') ?? 'gemini-2.5-flash';
+/** Redacción de la síntesis. Ojo: gemini-2.5-pro está RETIRADO para cuentas
+ *  nuevas (404) y 2.5-flash-lite también; 2.5-flash es el verificado que responde. */
+export const MODELO_SINTESIS = env('MODELO_SINTESIS') ?? 'gemini-2.5-flash';
 /** Rerank de la fase 2 (top 40 → top 8). */
-export const MODELO_RERANK = env('MODELO_RERANK') ?? 'claude-haiku-4-5';
+export const MODELO_RERANK = env('MODELO_RERANK') ?? 'gemini-2.5-flash';
 
 export const TIMEOUT_ROUTER_MS = entero('TIMEOUT_ROUTER_MS', 8_000);
 /** Reloj de pared de toda la petición: nunca una pestaña congelada. */

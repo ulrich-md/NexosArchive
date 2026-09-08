@@ -28,7 +28,7 @@ import {
 import { bd } from '../bd.ts';
 import { ErrorBuscar, errorBd } from '../errores.ts';
 import { armarFichas } from '../fichas.ts';
-import { llamarConHerramienta } from '../claude.ts';
+import { llamarConHerramienta } from '../gemini.ts';
 import { ESQUEMA_RERANK, validarRerank } from '../validacion.ts';
 import { escaparParaPrompt } from '../texto.ts';
 import { COLUMNAS_ARTICULO, type Aviso, type FilaArticulo, type PasoTraza } from '../tipos.ts';

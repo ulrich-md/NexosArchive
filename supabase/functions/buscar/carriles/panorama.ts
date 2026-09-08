@@ -21,7 +21,7 @@ import {
 import { bd } from '../bd.ts';
 import { errorBd, ErrorBuscar } from '../errores.ts';
 import { armarFichas } from '../fichas.ts';
-import { clienteClaude, llamarConHerramienta } from '../claude.ts';
+import { hayModelo, llamarConHerramienta } from '../gemini.ts';
 import { ESQUEMA_SINTESIS, validarSintesis } from '../validacion.ts';
 import { escaparParaPrompt } from '../texto.ts';
 import {
@@ -308,10 +308,10 @@ export async function carrilPanorama(
   const fichasTodas = armarFichas(filas);
   const porId = new Map<number, Ficha>(fichasTodas.map((f) => [f.id, f]));
 
-  if (!clienteClaude()) {
+  if (!hayModelo()) {
     avisos.push({
       codigo: 'SINTESIS_NO_DISPONIBLE',
-      mensaje: 'No se pudo redactar la síntesis: falta configurar la llave de Anthropic.',
+      mensaje: 'No se pudo redactar la síntesis: falta configurar la llave de Gemini.',
       detalle: 'ANTHROPIC_API_KEY no está definida. Se devuelven las fichas sin agrupar.',
     });
     return {

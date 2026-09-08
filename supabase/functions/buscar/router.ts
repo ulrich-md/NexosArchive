@@ -16,7 +16,7 @@
 
 import { MAX_TOKENS_ROUTER, MODELO_ROUTER, TIMEOUT_ROUTER_MS } from './config.ts';
 import { catalogoAutores, resolverAutor, type AutorResuelto } from './bd.ts';
-import { clienteClaude, llamarConHerramienta } from './claude.ts';
+import { hayModelo, llamarConHerramienta } from './gemini.ts';
 import { ESQUEMA_ROUTER, validarClasificacion } from './validacion.ts';
 import {
   esVacia,
@@ -296,7 +296,7 @@ export async function clasificar(
   if (heuristica) return heuristica;
 
   if (!permitirLlm) return await clasificarRespaldo(pregunta, 'el carril no admite llamadas a un modelo');
-  if (!clienteClaude()) return await clasificarRespaldo(pregunta, 'falta ANTHROPIC_API_KEY');
+  if (!hayModelo()) return await clasificarRespaldo(pregunta, 'falta GEMINI_API_KEY');
 
   try {
     return await clasificarConLlm(pregunta);

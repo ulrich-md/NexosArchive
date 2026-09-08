@@ -5,9 +5,15 @@
 // volver a pedirlo. No se guarda aquí tampoco: se usa para armar el prompt y
 // se tira.
 //
-// Solo aplica a los 26 subdominios. En www el cuerpo está tras el paywall y
-// `content.rendered` viene vacío, así que pedirlo sería gastar peticiones para
-// nada.
+// Aplica a los 27 sitios, no solo a los subdominios. El spec daba por hecho que
+// en www el cuerpo entero está tras el paywall, y medido sobre 1,945 artículos
+// no es así: el paywall cubre el archivo impreso (0% de cuerpo público en los
+// ochenta, 1% en los noventa, 3% en los dos mil) pero se abre en lo reciente
+// (25% en los dosmildiez, 54% en los veinte). Son ~3,475 artículos de www con
+// el cuerpo disponible sin credenciales.
+//
+// Los que sigan cerrados devuelven `content` vacío y se catalogan con su
+// metadata, o se saltan con --solo-con-cuerpo.
 import './red.js';
 import { SITIOS, type Sitio } from './sitios.js';
 import { decode, fetchJson, sleep } from './wp.js';
@@ -102,7 +108,6 @@ export async function traerCuerpos(
 ): Promise<Map<number, string>> {
   const porSitio = new Map<string, ArticuloConCuerpo[]>();
   for (const a of articulos) {
-    if (a.sitio === 'www') continue; // paywall: content viene vacío
     const lista = porSitio.get(a.sitio) ?? [];
     lista.push(a);
     porSitio.set(a.sitio, lista);

@@ -88,6 +88,18 @@ const CON_CUERPO = process.argv.includes('--con-cuerpo');
 /** Cuántos caracteres del cuerpo se mandan. Es la palanca de costo de la corrida. */
 const CUERPO_CHARS = argNumero('cuerpo-chars', 3000);
 
+/**
+ * Saltar los artículos cuyo cuerpo no llegó, en vez de catalogarlos con su
+ * metadata. En www la mayoría sigue tras el paywall: gastarles una llamada
+ * produce el vacío correcto pero inútil, y con la cuota contada por petición
+ * eso es cuota que no llega a los que sí tienen texto. Quedan pendientes, así
+ * que el día que haya credenciales se enriquecen sin tocar nada más.
+ */
+const SOLO_CON_CUERPO = process.argv.includes('--solo-con-cuerpo');
+
+/** Acota la corrida a un sitio ('www', 'cultura', ...). */
+const SITIO = process.argv.find((a) => a.startsWith('--sitio='))?.split('=')[1] ?? null;
+
 // Con cuerpo, un lote de 20 son ~60k caracteres: se baja para que la respuesta
 // no se trunque y para que un lote fallido cueste menos.
 const TAM_LOTE = argNumero('lote', CON_CUERPO ? 10 : 20);
@@ -131,6 +143,7 @@ let totalLotesFallidos = 0;
 let totalArticulosPerdidos = 0;
 let totalConCuerpo = 0;
 let totalSinCuerpo = 0;
+let totalSinCuerpoSaltados = 0;
 let llamadas = 0;
 const llamadasPorModelo = new Map<string, number>();
 const inicio = Date.now();
@@ -274,7 +287,16 @@ async function procesarLote(lote: ArticuloParaEnriquecer[], profundidad = 0): Pr
     // Si se pidió leer el cuerpo y no llegó NINGUNO, el camino del cuerpo está
     // roto y seguir solo quema cuota produciendo resúmenes vacíos. Se corta la
     // corrida: es preferible a catalogar mal 13,797 artículos en silencio.
-    if (puestos === 0) {
+    if (SOLO_CON_CUERPO) {
+      const antes = conMaterial.length;
+      const filtrados = conMaterial.filter((a) => a.cuerpo);
+      conMaterial.length = 0;
+      conMaterial.push(...filtrados);
+      totalSinCuerpoSaltados += antes - filtrados.length;
+      if (conMaterial.length === 0) return { enriquecimientos, descartes: [], perdidos: 0 };
+    }
+
+    if (!SOLO_CON_CUERPO && puestos === 0) {
       const err: ErrorFatal = new Error(
         `Se pidió --con-cuerpo y no llegó el cuerpo de ninguno de los ${conMaterial.length} artículos del lote. ` +
         'Revisa el aviso de arriba: sin cuerpo, el catálogo sale casi todo vacío y la cuota se gasta igual.',
@@ -373,9 +395,7 @@ async function traerPendientes(supabase: Supabase, cursor: number): Promise<Arti
     .is('resumen_linea', null)
     .gt('id', cursor);
 
-  // --con-cuerpo solo tiene sentido donde hay cuerpo que leer: en www la API
-  // devuelve `content` vacío por el paywall.
-  if (CON_CUERPO) q = q.neq('sitio', 'www');
+  if (SITIO) q = q.eq('sitio', SITIO);
 
   const { data, error } = await q.order('id', { ascending: true }).limit(PAGINA_DB);
   if (error) throw new Error(`Error leyendo articulos pendientes: ${error.message}`);
@@ -597,6 +617,9 @@ async function main() {
   console.log('\n=== ENRIQUECIMIENTO ===');
   console.log(`Artículos catalogados:        ${totalEscritos}`);
   console.log(`  de ellos vacíos (no había de dónde sostenerlos): ${totalVacios}`);
+  if (SOLO_CON_CUERPO) {
+    console.log(`Saltados sin cuerpo:          ${totalSinCuerpoSaltados}  (siguen pendientes: el paywall los tapa)`);
+  }
   if (CON_CUERPO) {
     console.log(`  leídos con su cuerpo real:  ${totalConCuerpo}`);
     console.log(`  solo con metadata:          ${totalSinCuerpo}  (su API no devolvió cuerpo)`);

@@ -81,6 +81,55 @@ Dos cosas que hay que resolver antes de ingerirlos:
    `angelesmastretta` 10/12 ya estaban en la base, pero `aguilarcamin` y
    `redaccion` 0/12. Hay que deduplicar por título o por slug, nunca por id.
 
+### ⚠️ EL PAYWALL DE www NO CUBRE TODO EL ARCHIVO (2026-09-09)
+
+El spec afirma arriba que en www "el cuerpo del artículo está tras el paywall",
+sin matices, y por eso el enriquecimiento con cuerpo excluía el sitio principal.
+Medido sobre una muestra de 1,945 artículos repartida por las 192 páginas del
+archivo, el paywall cubre lo impreso y se abre en lo reciente:
+
+| década | con cuerpo público |
+|---|---|
+| 1980s | 0% |
+| 1990s | 1% |
+| 2000s | 3% |
+| 2010s | 25% |
+| 2020s | 54% |
+
+No es una frontera por año —2009 sale entero, 2011 nada, 2015 y 2020 abiertos—,
+así que no se puede decidir por fecha: hay que pedir el cuerpo y ver.
+`npm run enriquecer -- --con-cuerpo --solo-con-cuerpo` hace justo eso, y saltar
+los tapados deja la cuota para los que sí traen texto.
+
+Resultado: 2,641 artículos de www catalogados leyendo el artículo, que se
+estaban resolviendo solo por su título por una suposición que nadie comprobó.
+
+### Cómo sale gratis el enriquecimiento (2026-09-09)
+
+El 429 de la cuota de Gemini dice
+`GenerateRequestsPerDayPerProjectPerModel-FreeTier`: la cuota es por proyecto Y
+POR MODELO, y cuenta PETICIONES, no tokens. De ahí dos palancas que se
+multiplican y vuelven gratis una corrida que costaba ~$10:
+
+- **Lotes grandes.** 150 artículos con su cuerpo caben de sobra (medido: 120k
+  tokens de entrada y 17k de salida, contra límites de 1M y 65k). Los 13,797
+  subdominios pasaron de ~1,380 peticiones a 99.
+- **Varios modelos.** Siete modelos flash responden con la misma llave, cada uno
+  con su propio cupo.
+
+Tres trampas medidas, no supuestas:
+1. `maxTokens` estaba clavado en 16,000, así que cualquier lote de más de ~45
+   artículos llegaba truncado y se partía en dos, gastando justo las peticiones
+   que se querían ahorrar.
+2. Tres de los siete modelos rechazan `thinkingConfig` con un 400 sin explicar.
+   Se detecta al primer rechazo y se reintenta sin él.
+3. Hay un techo de TOKENS POR MINUTO además del de peticiones: dos lotes de 150
+   en paralelo lo rebasan y provocan 429 constantes. Concurrencia 1.
+
+Con lotes de 150 el modelo omite ~7% de los artículos —deja de escribir antes de
+cerrar el arreglo, sin que sea truncamiento por max_tokens—. No se pierden: no
+quedan marcados en la bitácora y una segunda pasada con lotes de 50 los recoge.
+
 ### Corrección del spec — reconocimiento contra la API en vivo (2026-09-07)
 
 Varias afirmaciones del spec original resultaron falsas al contrastarlas con la API.

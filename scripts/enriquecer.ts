@@ -56,6 +56,7 @@ import {
   hayTarifa, sinMaterial, sumarUso, usoVacio, validarRespuesta,
 } from './lib/enriquecimiento.js';
 import { traerCuerpos } from './lib/cuerpos.js';
+import { DIR_EXPORTS, cargarCuerposXml } from './lib/cuerpos-xml.js';
 
 const PAGINA_DB = 500;          // filas que se traen de Supabase por vuelta
 const REINTENTOS_API = 6;
@@ -99,6 +100,16 @@ const SOLO_CON_CUERPO = process.argv.includes('--solo-con-cuerpo');
 
 /** Acota la corrida a un sitio ('www', 'cultura', ...). */
 const SITIO = process.argv.find((a) => a.startsWith('--sitio='))?.split('=')[1] ?? null;
+
+/**
+ * Cuerpos tomados de las exportaciones WXR en vez de la API. Es la única fuente
+ * para el archivo impreso: la API lo devuelve vacío porque el plugin de
+ * membresía tapa `the_content`, pero la exportación lee `wp_posts` directo.
+ * Se cargan una vez y se consultan antes de pedirle nada a nexos.com.mx.
+ */
+const DIR_XML = process.argv.find((a) => a.startsWith('--xml='))?.split('=')[1]
+  ?? (CON_CUERPO ? DIR_EXPORTS : null);
+const cuerposXml = DIR_XML ? cargarCuerposXml(DIR_XML, CUERPO_CHARS) : new Map<number, string>();
 
 // Con cuerpo, un lote de 20 son ~60k caracteres: se baja para que la respuesta
 // no se trunque y para que un lote fallido cueste menos.
@@ -144,6 +155,7 @@ let totalArticulosPerdidos = 0;
 let totalConCuerpo = 0;
 let totalSinCuerpo = 0;
 let totalSinCuerpoSaltados = 0;
+let totalDeXml = 0;
 let llamadas = 0;
 const llamadasPorModelo = new Map<string, number>();
 const inicio = Date.now();
@@ -426,9 +438,22 @@ async function ponerCuerpos(lote: ArticuloParaEnriquecer[]): Promise<number> {
     .filter((o) => o.id_wp > 0);
   if (origenes.length === 0) return 0;
 
-  const cuerpos = await traerCuerpos(origenes, CUERPO_CHARS);
-  let puestos = 0;
+  // Primero los XML: son gratis, instantáneos y traen lo que la API no da.
+  let deXml = 0;
+  for (const o of origenes) {
+    const cuerpo = cuerposXml.get(o.id_wp);
+    if (cuerpo) {
+      lote.find((a) => a.id === o.id)!.cuerpo = cuerpo;
+      deXml++;
+    }
+  }
+  totalDeXml += deXml;
+
+  const faltantes = origenes.filter((o) => !cuerposXml.has(o.id_wp));
+  const cuerpos = await traerCuerpos(faltantes, CUERPO_CHARS);
+  let puestos = deXml;
   for (const a of lote) {
+    if (a.cuerpo) continue;
     const cuerpo = cuerpos.get(a.id);
     if (cuerpo) {
       a.cuerpo = cuerpo;
@@ -508,7 +533,8 @@ async function main() {
   console.log(`Lote ${TAM_LOTE} · concurrencia ${CONCURRENCIA}${SECO ? ' · MODO SECO' : ''}`);
   console.log(
     CON_CUERPO
-      ? `Leyendo el cuerpo real de los artículos (${CUERPO_CHARS} caracteres por artículo)` +
+      ? (cuerposXml.size > 0 ? `${cuerposXml.size} cuerpos cargados de ${DIR_XML}. ` : '') +
+        `Leyendo el cuerpo real de los artículos (${CUERPO_CHARS} caracteres por artículo)` +
         (SOLO_CON_CUERPO ? ', saltando los que el paywall tape.' : '.')
       : 'Solo metadata. Para leer el texto real: --con-cuerpo',
   );
@@ -623,6 +649,7 @@ async function main() {
   }
   if (CON_CUERPO) {
     console.log(`  leídos con su cuerpo real:  ${totalConCuerpo}`);
+    if (totalDeXml > 0) console.log(`    de ellos, desde los XML:  ${totalDeXml}  (archivo impreso)`);
     console.log(`  solo con metadata:          ${totalSinCuerpo}  (su API no devolvió cuerpo)`);
   }
   console.log(`Sin título utilizable:        ${totalSinMaterial}`);

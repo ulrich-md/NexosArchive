@@ -13,7 +13,8 @@
     "verificar": "tsx scripts/verificar.ts",
     "typecheck": "tsc --noEmit",
     "firmas-sitio": "tsx scripts/firmas-de-sitio.ts",
-    "probar-buscar": "tsx scripts/probar-buscar.ts"
+    "probar-buscar": "tsx scripts/probar-buscar.ts",
+    "indexar-impreso": "tsx scripts/indexar-impreso.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

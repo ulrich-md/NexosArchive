@@ -341,6 +341,15 @@ async function main() {
   console.log(`Guardados sin indexar cuerpo: ${sinIdx}  (JSON inválido del servidor)`);
   console.log(`Total en articulos:           ${count}`);
   console.log(`Avance reanudable:            ${RUTA_AVANCE}`);
+
+  // Sin esto, las facetas del sidebar (autores, secciones, décadas) se quedan
+  // con la foto de antes de esta corrida: los autores/secciones que solo
+  // existen en subdominios no aparecerían nunca (migración 0005).
+  if (nuevos > 0) {
+    const { error } = await supabase.rpc('refrescar_facetas');
+    if (error) console.error(`No se pudieron refrescar las facetas: ${error.message}`);
+    else console.log('Facetas (autores, secciones, décadas) refrescadas.');
+  }
 }
 
 main().catch((err) => {

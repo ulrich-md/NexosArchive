@@ -213,6 +213,8 @@ function validarBuscar(crudo: unknown): RespuestaBuscar {
       resumen_linea: typeof a.resumen_linea === 'string' ? a.resumen_linea : null,
     })),
     total: d.total ?? 0,
+    pagina: typeof d.pagina === 'number' ? d.pagina : 1,
+    por_pagina: typeof d.por_pagina === 'number' ? d.por_pagina : articulos.length,
     traza: (d.traza ?? []).map((p) => ({
       titulo: typeof p?.titulo === 'string' ? p.titulo : 'Paso sin nombre',
       subtitulo: typeof p?.subtitulo === 'string' ? p.subtitulo : null,

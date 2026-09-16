@@ -5,16 +5,18 @@
 // Si algo de este archivo llama a un modelo, está mal.
 
 import { CATALOGO_POR_PAGINA, CATALOGO_POR_PAGINA_MAX } from '../config.ts';
+import { bd } from '../bd.ts';
 import { armarFichas } from '../fichas.ts';
 import {
   aproximar,
   buscarArticulos,
   describirFiltros,
   hayFiltros,
+  literalArreglo,
   type FiltrosConsulta,
   type ResultadoCarril,
 } from './comun.ts';
-import type { Aviso } from '../tipos.ts';
+import type { Aviso, PasoTraza, Sintesis } from '../tipos.ts';
 
 export interface OpcionesCatalogo {
   pagina: number;
@@ -27,6 +29,51 @@ export function normalizarPaginacion(op: Partial<OpcionesCatalogo>): OpcionesCat
     ? op.por_pagina!
     : CATALOGO_POR_PAGINA;
   return { pagina, por_pagina: Math.min(bruto, CATALOGO_POR_PAGINA_MAX) };
+}
+
+/**
+ * El resumen que ve el editor sobre CUALQUIER pregunta, no solo panorama
+ * (petición explícita: "el resumen varía de acuerdo a la pregunta"). Catálogo
+ * sigue en CERO LLM (CLAUDE.md sección 4): esto es aritmética sobre los
+ * resultados reales, no redacción. Dos consultas más, ambas por el índice de
+ * `anio_pub`, así que el carril se sigue quedando muy por debajo de 100 ms.
+ */
+async function resumenCalculado(
+  filtros: FiltrosConsulta,
+  total: number,
+): Promise<Sintesis | null> {
+  if (total === 0) return null;
+
+  const anioExtremo = async (asc: boolean): Promise<number | null> => {
+    let q = bd().from('articulos').select('anio_pub');
+    if (filtros.autores.length > 0) q = q.filter('autores', 'ov', literalArreglo(filtros.autores));
+    if (filtros.rango_pub) q = q.gte('anio_pub', filtros.rango_pub.desde).lte('anio_pub', filtros.rango_pub.hasta);
+    if (filtros.anios_referidos.length > 0) {
+      q = q.filter('anios_referidos', 'ov', literalArreglo(filtros.anios_referidos));
+    }
+    if (filtros.temas.length > 0) q = q.filter('temas', 'ov', literalArreglo(filtros.temas));
+    if (filtros.texto && filtros.texto.trim() !== '') {
+      q = q.textSearch('ts', filtros.texto.trim(), { config: 'spanish', type: 'websearch' });
+    }
+    if (filtros.seccion) q = q.eq('seccion', filtros.seccion);
+    const { data, error } = await q.order('anio_pub', { ascending: asc }).limit(1).maybeSingle();
+    if (error) return null; // el resumen es una cortesía: si falla, no tumba la respuesta
+    return (data as { anio_pub: number } | null)?.anio_pub ?? null;
+  };
+
+  const [anioMin, anioMax] = await Promise.all([anioExtremo(true), anioExtremo(false)]);
+
+  const cifra = total === 1 ? '1 artículo' : `${total} artículos`;
+  const rango = anioMin != null && anioMax != null
+    ? anioMin === anioMax ? ` de ${anioMin}` : ` entre ${anioMin} y ${anioMax}`
+    : '';
+
+  return {
+    texto: `${cifra}${rango} que cumplen: ${describirFiltros(filtros)}.`,
+    temas: [],
+    fichas_consideradas: total,
+    modelo: 'calculado',
+  };
 }
 
 export async function carrilCatalogo(
@@ -103,6 +150,18 @@ export async function carrilCatalogo(
     };
   }
 
+  const t1 = performance.now();
+  const sintesis = await resumenCalculado(filtros, total);
+  const pasos: PasoTraza[] = [paso];
+  if (sintesis) {
+    pasos.push({
+      paso: 'sintesis',
+      titulo: 'Calculó el resumen',
+      detalle: 'Sin modelo: aritmética directa sobre los resultados.',
+      ms: Math.round(performance.now() - t1),
+    });
+  }
+
   return {
     modo: 'catalogo',
     fichas: armarFichas(filas),
@@ -111,9 +170,9 @@ export async function carrilCatalogo(
     por_pagina: op.por_pagina,
     aproximados: false,
     reformulacion: null,
-    sintesis: null,
+    sintesis,
     filtros,
     avisos: avisosPrevios,
-    pasos: [paso],
+    pasos,
   };
 }

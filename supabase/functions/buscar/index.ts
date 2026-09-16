@@ -151,8 +151,11 @@ async function manejar(
   avisos.push(...clasificacion.avisos);
   traza.push({
     paso: 'router',
-    titulo: 'Clasificó la consulta',
-    detalle: `modo ${clasificacion.modo} · ${clasificacion.origen} · ${clasificacion.razon}`,
+    titulo: 'Interpretó la pregunta',
+    // Nunca se nombra el carril interno (panorama/hibrida/catalogo) en texto
+    // que ve el editor: es una decisión de costo/arquitectura, no un concepto
+    // de producto (el usuario nunca elige "modo").
+    detalle: `${clasificacion.origen} · ${clasificacion.razon}`,
     ms: Math.round(performance.now() - tRouter),
   });
 

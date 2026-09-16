@@ -22,3 +22,8 @@ logs/*.txt
 # Caché local del CLI de Supabase (detecta la versión de Postgres al hacer
 # link/db push). No es contenido del proyecto.
 supabase/.temp/
+
+# `deno check`/`deno test` a veces escriben un lockfile en la raíz del repo
+# en vez de dentro de la función que se está probando. No hay proyecto Deno
+# en la raíz; el lockfile que sí cuenta es supabase/functions/buscar/deno.lock.
+/deno.lock

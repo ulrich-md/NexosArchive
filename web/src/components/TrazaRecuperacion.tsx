@@ -68,7 +68,10 @@ function Paso({ paso }: { paso: PasoTraza }) {
 }
 
 export function TrazaRecuperacion({ pasos }: { pasos: PasoTraza[] }) {
-  const [abierta, setAbierta] = useState(false);
+  // Abierta por defecto: un editor no confía en una caja negra (sección 3,
+  // mejora 3) — pedido explícito de que el "proceso de pensamiento" se vea
+  // sin necesidad de un clic extra.
+  const [abierta, setAbierta] = useState(true);
   if (pasos.length === 0) return null;
 
   return (

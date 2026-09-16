@@ -286,9 +286,6 @@ export function BarraLateral({
           nexos.com.mx
           <ExternalLink className="h-3 w-3" strokeWidth={1.75} aria-hidden />
         </a>
-        <a href="/admin" className="mono-meta block text-muted-foreground hover:text-primary">
-          Administración
-        </a>
       </div>
     </aside>
   );

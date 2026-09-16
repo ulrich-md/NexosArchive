@@ -1,5 +1,3 @@
-import type { Modo } from './contrato';
-
 /**
  * Cifras verificadas contra la ingesta reconciliada de los 27 WordPress de
  * Nexos (CLAUDE.md secciones 1 y 2). No son datos de ejemplo: el subtítulo solo
@@ -18,25 +16,6 @@ export const TOTAL_ESPERADO = 32942;
 export const LINEA_AYUDA = `Solo responde con lo que existe en el archivo de la revista, ${ANIO_INICIAL}–${ANIO_FINAL}`;
 
 export const DIAS_RETENCION = 7;
-
-/** Chips de la sección 3, mejora 4. `Buscar` es el carril híbrido de la sección 4. */
-export const MODOS: ReadonlyArray<{ id: Modo; etiqueta: string; ayuda: string }> = [
-  {
-    id: 'panorama',
-    etiqueta: 'Panorama',
-    ayuda: 'Agrupa cientos de textos en temáticas y redacta una síntesis.',
-  },
-  {
-    id: 'hibrida',
-    etiqueta: 'Buscar',
-    ayuda: 'Búsqueda por significado y por texto, fusionadas y reordenadas.',
-  },
-  {
-    id: 'catalogo',
-    etiqueta: 'Catálogo',
-    ayuda: 'Lista directa desde la base, sin modelo de lenguaje.',
-  },
-];
 
 /** Sección 3, mejora 6. Texto exacto. */
 export const EJEMPLOS: readonly string[] = [

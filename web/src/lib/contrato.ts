@@ -89,6 +89,8 @@ export interface RespuestaBuscar {
   articulos: Articulo[];
   /** Total de coincidencias en la base, no la longitud de `articulos`. */
   total: number;
+  pagina: number;
+  por_pagina: number;
   traza: PasoTraza[];
   /** true ⇒ no hubo coincidencia exacta y esto es lo más cercano (regla 3). */
   aproximados: boolean;

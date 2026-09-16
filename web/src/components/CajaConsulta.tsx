@@ -1,9 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { LINEA_AYUDA, MODOS } from '@/lib/constantes';
-import type { Modo } from '@/lib/contrato';
-import { cn } from '@/lib/utilidades';
+import { LINEA_AYUDA } from '@/lib/constantes';
 
 /**
  * Caja de consulta (sección 3).
@@ -13,19 +11,19 @@ import { cn } from '@/lib/utilidades';
  * válida; mientras la consulta corre, el textarea queda deshabilitado pero
  * VISIBLE con lo que el usuario escribió, y si falla se conserva íntegro
  * para reintentar.
+ *
+ * Sin chips de modo: el usuario nunca elige un carril (panorama/híbrida/
+ * catálogo). El router del backend decide solo, siempre — es una decisión de
+ * costo interna, no un concepto que el editor deba conocer.
  */
 export function CajaConsulta({
   valor,
   onValor,
-  modo,
-  onModo,
   onEnviar,
   ocupado,
 }: {
   valor: string;
   onValor: (v: string) => void;
-  modo: Modo;
-  onModo: (m: Modo) => void;
   onEnviar: () => void;
   ocupado: boolean;
 }) {
@@ -89,32 +87,6 @@ export function CajaConsulta({
           {LINEA_AYUDA}
         </p>
       </form>
-
-      {/* Tres chips de modo, uno activo a la vez (sección 3, mejora 4). */}
-      <div
-        className="mt-3 flex flex-wrap items-center gap-2"
-        role="radiogroup"
-        aria-label="Modo de consulta"
-      >
-        {MODOS.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            role="radio"
-            aria-checked={modo === m.id}
-            title={m.ayuda}
-            onClick={() => onModo(m.id)}
-            className={cn(
-              'mono-meta rounded-[3px] border px-2.5 py-1 transition-all duration-150 motion-safe:active:scale-95',
-              modo === m.id
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-surface text-muted-foreground hover:border-primary hover:text-primary',
-            )}
-          >
-            {m.etiqueta}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

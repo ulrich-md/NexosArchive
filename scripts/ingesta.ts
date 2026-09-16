@@ -203,15 +203,15 @@ async function main() {
 
   await supabase.from('sync_estado').update({ actualizado_en: new Date().toISOString() }).eq('id', 1);
 
-  // La vista materializada del sidebar no se refresca sola: sin esto el
-  // sidebar carga vacío aunque la ingesta haya ido bien (ver migración 0002).
-  const { error: errorRefresco } = await supabase.rpc('refrescar_autores_conteo');
+  // Las vistas materializadas del sidebar no se refrescan solas: sin esto el
+  // sidebar carga vacío aunque la ingesta haya ido bien (migraciones 0002 y 0005).
+  const { error: errorRefresco } = await supabase.rpc('refrescar_facetas');
   if (errorRefresco) {
-    console.error(`\nNo se pudo refrescar autores_conteo: ${errorRefresco.message}`);
-    console.error('El sidebar de autores va a cargar vacío. ¿Aplicaste supabase/migrations/0002?');
+    console.error(`\nNo se pudieron refrescar las facetas: ${errorRefresco.message}`);
+    console.error('El sidebar va a cargar vacío. ¿Aplicaste supabase/migrations/0005?');
     process.exitCode = 1;
   } else {
-    console.log('Vista autores_conteo refrescada.');
+    console.log('Facetas (autores, secciones, décadas) refrescadas.');
   }
 
   if (Math.abs(diferencia) > 5) {

@@ -8,7 +8,7 @@ import { LogoNexos } from '@/components/LogoNexos';
 import { PanelReposo } from '@/components/PanelReposo';
 import { Button } from '@/components/ui/button';
 import { ErrorConsulta, MS_AVISO_LENTO, MS_LIMITE, buscar, facetas as pedirFacetas } from '@/lib/api';
-import type { Modo, RespuestaFacetas } from '@/lib/contrato';
+import type { RespuestaFacetas } from '@/lib/contrato';
 import {
   alCambiarSesion,
   cerrarSesion,
@@ -24,7 +24,6 @@ function nuevoId() {
 
 export default function App() {
   const [texto, setTexto] = useState('');
-  const [modo, setModo] = useState<Modo>('hibrida');
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [sidebarAbierta, setSidebarAbierta] = useState(true);
   const [menuMovil, setMenuMovil] = useState(false);
@@ -76,7 +75,7 @@ export default function App() {
 
   // --- Consulta ------------------------------------------------------------
   const preguntar = useCallback(
-    async (pregunta: string, modoUsado: Modo, idTurno: string) => {
+    async (pregunta: string, idTurno: string) => {
       const control = new AbortController();
       abortRef.current = control;
 
@@ -87,7 +86,8 @@ export default function App() {
       const marcaLimite = window.setTimeout(() => control.abort('limite'), MS_LIMITE);
 
       try {
-        const respuesta = await buscar({ pregunta, modo: modoUsado }, control.signal);
+        // Nunca se manda `modo`: el router decide solo (ningún chip lo sugiere).
+        const respuesta = await buscar({ pregunta }, control.signal);
         setTurnos((ts) =>
           ts.map((t) =>
             t.id === idTurno ? { ...t, estado: 'lista', lento: false, respuesta } : t,
@@ -133,11 +133,11 @@ export default function App() {
       const id = nuevoId();
       setTurnos((ts) => [
         ...ts,
-        { id, pregunta, estado: 'cargando', lento: false, respuesta: null, error: null },
+        { id, pregunta, estado: 'cargando', lento: false, respuesta: null, error: null, paginando: false },
       ]);
-      void preguntar(pregunta, modo, id);
+      void preguntar(pregunta, id);
     },
-    [texto, ocupado, modo, preguntar],
+    [texto, ocupado, preguntar],
   );
 
   const reintentar = useCallback(
@@ -150,9 +150,31 @@ export default function App() {
             : t,
         ),
       );
-      void preguntar(turno.pregunta, modo, turno.id);
+      void preguntar(turno.pregunta, turno.id);
     },
-    [ocupado, modo, preguntar],
+    [ocupado, preguntar],
+  );
+
+  // Cambiar de página no reabre todo el turno como "cargando": solo la lista
+  // de artículos se marca ocupada, el resumen y la traza ya calculados
+  // se quedan a la vista mientras llega la página nueva.
+  const cambiarPagina = useCallback(
+    (turno: Turno, pagina: number) => {
+      if (ocupado || turno.paginando) return;
+      setTurnos((ts) => ts.map((t) => (t.id === turno.id ? { ...t, paginando: true } : t)));
+
+      buscar({ pregunta: turno.pregunta, pagina })
+        .then((respuesta) => {
+          setTurnos((ts) =>
+            ts.map((t) => (t.id === turno.id ? { ...t, respuesta, paginando: false } : t)),
+          );
+        })
+        .catch(() => {
+          // Cortesía, no crítico: si falla, se deja la página actual tal cual.
+          setTurnos((ts) => ts.map((t) => (t.id === turno.id ? { ...t, paginando: false } : t)));
+        });
+    },
+    [ocupado],
   );
 
   const cancelar = useCallback(() => abortRef.current?.abort('cancelada'), []);
@@ -259,8 +281,11 @@ export default function App() {
                 <BloqueRespuesta
                   key={t.id}
                   turno={t}
+                  facetas={facetas}
                   onReintentar={() => reintentar(t)}
                   onCancelar={cancelar}
+                  onPagina={(pagina) => cambiarPagina(t, pagina)}
+                  onFiltro={(p) => enviar(p)}
                 />
               ))}
               <div ref={finRef} />
@@ -278,8 +303,6 @@ export default function App() {
           <CajaConsulta
             valor={texto}
             onValor={setTexto}
-            modo={modo}
-            onModo={setModo}
             onEnviar={() => enviar()}
             ocupado={ocupado}
           />

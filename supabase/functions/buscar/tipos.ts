@@ -107,9 +107,12 @@ export interface Tematica {
 
 export interface Sintesis {
   texto: string;
+  /** Vacío cuando no hubo LLM de por medio (catálogo: se calcula, no se agrupa). */
   temas: Tematica[];
-  /** Cuántas fichas se le dieron al modelo para agrupar. */
+  /** Cuántas fichas se consideraron (al modelo, o al cálculo si no hubo modelo). */
   fichas_consideradas: number;
+  /** Nombre del modelo, o `'calculado'` cuando el texto sale de un cálculo
+   *  directo sobre los resultados, sin ningún LLM (catálogo, sección 4). */
   modelo: string;
 }
 

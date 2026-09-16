@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { ArrowUpRight, ChevronDown } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Button } from '@/components/ui/button';
 import { FichaArticulo } from '@/components/FichaArticulo';
+import { FiltrosBusqueda } from '@/components/FiltrosBusqueda';
 import { TextoRespuesta } from '@/components/TextoRespuesta';
 import { TrazaRecuperacion } from '@/components/TrazaRecuperacion';
 import { ArchivoVacio, CargandoRespuesta, ErrorRespuesta } from '@/components/Estados';
-import { MODOS } from '@/lib/constantes';
-import type { RespuestaBuscar } from '@/lib/contrato';
+import type { RespuestaBuscar, RespuestaFacetas } from '@/lib/contrato';
 import { ErrorConsulta } from '@/lib/api';
 import { conMiles, urlBusquedaNexos } from '@/lib/utilidades';
 
@@ -17,10 +18,21 @@ export interface Turno {
   lento: boolean;
   respuesta: RespuestaBuscar | null;
   error: ErrorConsulta | Error | null;
+  /** Cambiando de página: solo la lista de artículos se recarga, el resumen
+   *  y la traza de esta misma respuesta se quedan quietos. */
+  paginando: boolean;
 }
 
-function ListaArticulos({ respuesta }: { respuesta: RespuestaBuscar }) {
-  const [abierta, setAbierta] = useState(respuesta.modo === 'catalogo');
+function ListaArticulos({
+  respuesta,
+  paginando,
+  onPagina,
+}: {
+  respuesta: RespuestaBuscar;
+  paginando: boolean;
+  onPagina: (pagina: number) => void;
+}) {
+  const [abierta, setAbierta] = useState(true);
 
   if (respuesta.articulos.length === 0) {
     return (
@@ -29,6 +41,11 @@ function ListaArticulos({ respuesta }: { respuesta: RespuestaBuscar }) {
       </p>
     );
   }
+
+  const porPagina = respuesta.por_pagina || respuesta.articulos.length;
+  const totalPaginas = Math.max(1, Math.ceil(respuesta.total / porPagina));
+  const paginaActual = Math.min(Math.max(1, respuesta.pagina || 1), totalPaginas);
+  const puedePaginar = totalPaginas > 1;
 
   return (
     <Collapsible open={abierta} onOpenChange={setAbierta}>
@@ -53,16 +70,39 @@ function ListaArticulos({ respuesta }: { respuesta: RespuestaBuscar }) {
         </CollapsibleTrigger>
 
         <CollapsibleContent className="overflow-hidden motion-safe:data-[state=closed]:animar-plegar motion-safe:data-[state=open]:animar-desplegar">
-          <div className="border-t border-border px-4 py-1">
+          <div
+            className={`border-t border-border px-4 py-1 transition-opacity ${paginando ? 'opacity-50' : ''}`}
+            aria-busy={paginando}
+          >
             {respuesta.articulos.map((a) => (
               <FichaArticulo key={a.id} articulo={a} />
             ))}
           </div>
 
-          {respuesta.total > respuesta.articulos.length ? (
-            <p className="mono-meta border-t border-border px-4 py-2 text-muted-foreground">
-              Mostrando {conMiles(respuesta.articulos.length)} de {conMiles(respuesta.total)}.
-            </p>
+          {puedePaginar ? (
+            <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2">
+              <Button
+                variant="contorno"
+                size="sm"
+                disabled={paginaActual <= 1 || paginando}
+                onClick={() => onPagina(paginaActual - 1)}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                Anterior
+              </Button>
+              <span className="mono-meta tabular text-muted-foreground">
+                Página {paginaActual} de {conMiles(totalPaginas)}
+              </span>
+              <Button
+                variant="contorno"
+                size="sm"
+                disabled={paginaActual >= totalPaginas || paginando}
+                onClick={() => onPagina(paginaActual + 1)}
+              >
+                Siguiente
+                <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+              </Button>
+            </div>
           ) : null}
         </CollapsibleContent>
       </div>
@@ -72,15 +112,20 @@ function ListaArticulos({ respuesta }: { respuesta: RespuestaBuscar }) {
 
 export function BloqueRespuesta({
   turno,
+  facetas,
   onReintentar,
   onCancelar,
+  onPagina,
+  onFiltro,
 }: {
   turno: Turno;
+  facetas: RespuestaFacetas | null;
   onReintentar: () => void;
   onCancelar: () => void;
+  onPagina: (pagina: number) => void;
+  onFiltro: (pregunta: string) => void;
 }) {
   const r = turno.respuesta;
-  const etiquetaModo = r ? MODOS.find((m) => m.id === r.modo)?.etiqueta : null;
 
   return (
     <section className="motion-safe:animar-aparecer">
@@ -116,12 +161,6 @@ export function BloqueRespuesta({
               <div className="border-l-2 border-primary/40 pl-4 md:pl-5">
                 <p className="mono-meta mb-2 text-muted-foreground">
                   Respuesta del archivo
-                  {etiquetaModo ? (
-                    <>
-                      <span className="px-1.5 text-border">·</span>
-                      {etiquetaModo}
-                    </>
-                  ) : null}
                   <span className="px-1.5 text-border">·</span>
                   <span className="tabular">{conMiles(r.ms)} ms</span>
                 </p>
@@ -139,7 +178,9 @@ export function BloqueRespuesta({
               </p>
             ) : null}
 
-            <ListaArticulos respuesta={r} />
+            <ListaArticulos respuesta={r} paginando={turno.paginando} onPagina={onPagina} />
+
+            <FiltrosBusqueda facetas={facetas} deshabilitado={turno.paginando} onFiltro={onFiltro} />
 
             <a
               href={urlBusquedaNexos(turno.pregunta)}

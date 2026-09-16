@@ -36,7 +36,7 @@ export default function App() {
   const [avisoAcceso, setAvisoAcceso] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
-  const finRef = useRef<HTMLDivElement>(null);
+  const ultimoTurnoRef = useRef<HTMLDivElement>(null);
 
   const ocupado = turnos.some((t) => t.estado === 'cargando');
 
@@ -69,9 +69,15 @@ export default function App() {
     };
   }, []);
 
+  // Scroll al INICIO de la pregunta nueva, no al fondo de la respuesta: saltar
+  // hasta abajo deja la traza animándose fuera de la vista (se ve "bugueado").
+  // Depende de `turnos.length`, no de `turnos`, para que solo dispare cuando
+  // se agrega un turno — nunca cuando ese mismo turno se actualiza (llega la
+  // respuesta, cambia de página): ahí el contenido crece hacia abajo solo,
+  // sin que nada vuelva a forzar el scroll.
   useEffect(() => {
-    finRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [turnos]);
+    ultimoTurnoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [turnos.length]);
 
   // --- Consulta ------------------------------------------------------------
   const preguntar = useCallback(
@@ -277,18 +283,18 @@ export default function App() {
         {enConversacion ? (
           <div className="flex-1 overflow-y-auto px-4 pb-8 pt-6 md:px-8 md:py-10">
             <div className="mx-auto w-full max-w-3xl space-y-10">
-              {turnos.map((t) => (
-                <BloqueRespuesta
-                  key={t.id}
-                  turno={t}
-                  facetas={facetas}
-                  onReintentar={() => reintentar(t)}
-                  onCancelar={cancelar}
-                  onPagina={(pagina) => cambiarPagina(t, pagina)}
-                  onFiltro={(p) => enviar(p)}
-                />
+              {turnos.map((t, i) => (
+                <div key={t.id} ref={i === turnos.length - 1 ? ultimoTurnoRef : undefined}>
+                  <BloqueRespuesta
+                    turno={t}
+                    facetas={facetas}
+                    onReintentar={() => reintentar(t)}
+                    onCancelar={cancelar}
+                    onPagina={(pagina) => cambiarPagina(t, pagina)}
+                    onFiltro={(p) => enviar(p)}
+                  />
+                </div>
               ))}
-              <div ref={finRef} />
             </div>
           </div>
         ) : (

@@ -171,7 +171,7 @@
 }
 
 @utility animar-aparecer {
-  animation: nx-aparecer 0.3s ease-out;
+  animation: nx-aparecer 0.45s ease-out;
 }
 
 @utility animar-desplegar {

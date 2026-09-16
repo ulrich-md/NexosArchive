@@ -98,7 +98,7 @@ export function TrazaRecuperacion({ pasos }: { pasos: PasoTraza[] }) {
           {/* Línea vertical de 1px que une los pasos. */}
           <span className="absolute bottom-2 left-[10px] top-2 w-px bg-border" aria-hidden />
           {pasos.map((paso, i) => (
-            <Paso key={`${paso.titulo}-${i}`} paso={paso} retraso={i * 340} />
+            <Paso key={`${paso.titulo}-${i}`} paso={paso} retraso={i * 480} />
           ))}
         </div>
       </CollapsibleContent>

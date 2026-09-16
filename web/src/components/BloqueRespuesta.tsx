@@ -32,7 +32,9 @@ function ListaArticulos({
   paginando: boolean;
   onPagina: (pagina: number) => void;
 }) {
-  const [abierta, setAbierta] = useState(true);
+  // Colapsados por defecto: primero el resumen, los artículos se piden con
+  // un clic (pedido explícito).
+  const [abierta, setAbierta] = useState(false);
 
   if (respuesta.articulos.length === 0) {
     return (
@@ -178,9 +180,9 @@ export function BloqueRespuesta({
               </p>
             ) : null}
 
-            <ListaArticulos respuesta={r} paginando={turno.paginando} onPagina={onPagina} />
-
             <FiltrosBusqueda facetas={facetas} deshabilitado={turno.paginando} onFiltro={onFiltro} />
+
+            <ListaArticulos respuesta={r} paginando={turno.paginando} onPagina={onPagina} />
 
             <a
               href={urlBusquedaNexos(turno.pregunta)}

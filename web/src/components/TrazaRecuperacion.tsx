@@ -20,6 +20,11 @@ import type { IconoTraza, PasoTraza } from '@/lib/contrato';
  *
  * Un editor no confía en una caja negra; sí confía en algo que le enseña
  * de dónde salió cada resultado.
+ *
+ * Los pasos se revelan uno a uno con un pequeño retraso escalonado (pedido
+ * explícito), aunque la respuesta ya llegó completa: no hay streaming real
+ * del backend, es puro ritmo visual con `animation-delay` por paso — se
+ * desactiva solo con `prefers-reduced-motion`.
  */
 
 const ICONOS: Record<IconoTraza, LucideIcon> = {
@@ -31,13 +36,16 @@ const ICONOS: Record<IconoTraza, LucideIcon> = {
   redaccion: PenLine,
 };
 
-function Paso({ paso }: { paso: PasoTraza }) {
+function Paso({ paso, retraso }: { paso: PasoTraza; retraso: number }) {
   const [abierto, setAbierto] = useState(false);
   const Icono = (paso.icono && ICONOS[paso.icono]) || ScanSearch;
   const tieneDetalle = Boolean(paso.detalle);
 
   return (
-    <div className="relative pl-8">
+    <div
+      className="relative pl-8 motion-safe:animar-aparecer"
+      style={{ animationDelay: `${retraso}ms`, animationFillMode: 'backwards' }}
+    >
       <span className="absolute left-0 top-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface">
         <Icono className="h-3 w-3 text-primary" strokeWidth={1.75} aria-hidden />
       </span>
@@ -90,7 +98,7 @@ export function TrazaRecuperacion({ pasos }: { pasos: PasoTraza[] }) {
           {/* Línea vertical de 1px que une los pasos. */}
           <span className="absolute bottom-2 left-[10px] top-2 w-px bg-border" aria-hidden />
           {pasos.map((paso, i) => (
-            <Paso key={`${paso.titulo}-${i}`} paso={paso} />
+            <Paso key={`${paso.titulo}-${i}`} paso={paso} retraso={i * 340} />
           ))}
         </div>
       </CollapsibleContent>

@@ -101,7 +101,7 @@ export const RPC_CHUNKS_VECTOR = env('RPC_CHUNKS_VECTOR') ?? 'buscar_chunks_vect
 // --- Límites de consulta ----------------------------------------------------
 export const PANORAMA_MIN_FILAS = entero('PANORAMA_MIN_FILAS', 200);
 export const PANORAMA_MAX_FILAS = entero('PANORAMA_MAX_FILAS', 400);
-export const CATALOGO_POR_PAGINA = entero('CATALOGO_POR_PAGINA', 20);
+export const CATALOGO_POR_PAGINA = entero('CATALOGO_POR_PAGINA', 10);
 export const CATALOGO_POR_PAGINA_MAX = entero('CATALOGO_POR_PAGINA_MAX', 100);
 export const APROXIMADOS_N = 5;
 export const PREGUNTA_MAX_CARACTERES = 500;

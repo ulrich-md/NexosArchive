@@ -101,12 +101,20 @@ export async function llamarGemini(op: OpcionesGemini): Promise<RespuestaGemini>
   let conThinking = !op.pensar && !SIN_THINKING.has(op.modelo);
   let cuerpo = armarCuerpo(conThinking);
 
+  // Sin timeout, un fetch atorado en el proxy de salida cuelga el proceso
+  // entero para siempre: no truena, no reintenta, no hay línea nueva en el log.
+  // Pasó en una corrida real — el intento 7 nunca resolvió ni rechazó, y el
+  // proceso quedó vivo pero inerte. AbortSignal.timeout lo convierte en un
+  // fallo de red normal, que el mismo bucle de abajo ya sabe reintentar.
+  const TIMEOUT_MS = 90_000;
+
   let intento = 0;
   for (;;) {
     const res = await fetch(`${BASE}/${op.modelo}:generateContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': llave, 'content-type': 'application/json' },
       body: JSON.stringify(cuerpo),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     }).catch(() => null);
 
     if (res?.ok) {

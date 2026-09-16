@@ -64,10 +64,20 @@ let indexados = 0;
 let sinCuerpo = 0;
 let lotesFallidos = 0;
 for (let desde = 0; ; desde += 1000) {
-  const { data, error } = await sb
-    .from('articulos').select('id,id_wp,resumen_linea,temas')
-    .eq('sitio', 'www').order('id').range(desde, desde + 999);
-  if (error) throw new Error(error.message);
+  // La misma lectura simple murió dos veces por timeout, casi seguro por la
+  // carga de la base con varios `enriquecer.ts` escribiendo al mismo tiempo:
+  // una lectura no debería tronar el script entero por contención pasajera.
+  let data: { id: number; id_wp: number; resumen_linea: string | null; temas: string[] }[] | null = null;
+  for (let intento = 0; ; intento++) {
+    const r = await sb
+      .from('articulos').select('id,id_wp,resumen_linea,temas')
+      .eq('sitio', 'www').order('id').range(desde, desde + 999);
+    if (!r.error) { data = r.data; break; }
+    if (intento >= 5) throw new Error(`leyendo desde=${desde}: ${r.error.message}`);
+    console.warn(`
+  [reintento] leyendo desde=${desde} (${intento + 1}/5): ${r.error.message}`);
+    await sleep(1000 * 2 ** intento);
+  }
   if (!data?.length) break;
 
   const filas: { id: number; cuerpo: string }[] = [];

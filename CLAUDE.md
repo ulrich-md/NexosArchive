@@ -313,7 +313,7 @@ Referencia viva: `https://archivonexos.online/`. Tokens extraídos del CSS de pr
 - **IBM Plex Mono** — metadatos, cifras, IDs, contadores, la línea de ayuda bajo el input. Siempre `font-variant-numeric: tabular-nums`.
 ### Layout
 **Sidebar izquierda (~315px, colapsable con un botón en la esquina superior derecha del sidebar):**
-- Logo `nexos` arriba: palabra en minúsculas, blanca, semibold, `letter-spacing: -0.03em`, sobre rectángulo `#018FBD` con `border-radius: 3px`. Nunca otro logo, nunca animado.
+- Logo `nexos` arriba: **el archivo real de Nexos** (`web/public/logo-nexos-blue.jpeg`, cuadrado, 375×375, azul de marca ya incluido en el jpeg), no una recreación en CSS — corregido 2026-09-16 tras pedido explícito del dueño ("usa el logo exacto, esta imagen"). `border-radius: 3px` aplicado por fuera de la imagen. Nunca otro logo, nunca animado.
 - Botón `+ Chat nuevo`, ancho completo, borde 1px, fondo surface.
 - Label en mono con tracking amplio: `EXPLORAR EL ARCHIVO`
 - Input de filtro con icono de lupa: `Filtrar autores y secciones`

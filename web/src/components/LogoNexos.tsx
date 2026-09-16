@@ -1,12 +1,13 @@
 import { cn } from '@/lib/utilidades';
 
 /**
- * Logo `nexos`: palabra en minúsculas, blanca, semibold,
- * letter-spacing -0.03em, sobre rectángulo #018FBD con radius 3px.
- * Nunca otro logo, nunca animado (CLAUDE.md sección 3).
+ * Logo real de Nexos (`web/public/logo-nexos-blue.jpeg`), no una recreación
+ * en CSS — pedido explícito del dueño del proyecto: "usa el logo exacto,
+ * esta imagen". Nunca otro logo, nunca animado (CLAUDE.md sección 3).
  *
- * El rectángulo usa el azul literal `#018FBD` y no `--primary`: en modo
- * oscuro `--primary` es #3cb6dc, y el logo de Nexos no cambia de color.
+ * Es cuadrado en el archivo original (375×375, azul de marca ya incluido en
+ * el jpeg), así que se muestra como cuadrado en las dos escalas, con el
+ * radius de 3px que pide la sección 3 aplicado por fuera de la imagen.
  */
 export function LogoNexos({
   tamano = 'sm',
@@ -16,15 +17,14 @@ export function LogoNexos({
   className?: string;
 }) {
   return (
-    <span
+    <img
+      src="/logo-nexos-blue.jpeg"
+      alt="nexos"
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-[3px] bg-[#018FBD] font-sans font-semibold text-white',
-        tamano === 'sm' ? 'h-7 px-2.5 text-base' : 'h-16 px-6 text-[40px] md:h-20 md:text-[52px]',
+        'shrink-0 rounded-[3px] object-cover',
+        tamano === 'sm' ? 'h-7 w-7' : 'h-16 w-16 md:h-20 md:w-20',
         className,
       )}
-      style={{ letterSpacing: '-0.03em' }}
-    >
-      nexos
-    </span>
+    />
   );
 }

@@ -16,6 +16,7 @@
 
 import { MAX_TOKENS_ROUTER, MODELO_ROUTER, TIMEOUT_ROUTER_MS } from './config.ts';
 import { catalogoAutores, resolverAutor, type AutorResuelto } from './bd.ts';
+import { ErrorBuscar } from './errores.ts';
 import { hayModelo, llamarConHerramienta } from './gemini.ts';
 import { ESQUEMA_ROUTER, validarClasificacion } from './validacion.ts';
 import {
@@ -356,8 +357,13 @@ export async function clasificar(
     return await clasificarConLlm(pregunta);
   } catch (e) {
     // Que el router falle no puede dejar al editor sin respuesta: se degrada
-    // a reglas y se dice qué pasó.
-    const detalle = e instanceof Error ? e.message : String(e);
+    // a reglas y se dice qué pasó. Un ErrorBuscar trae en `.detalle` el
+    // diagnóstico real (HTTP y cuerpo de la respuesta de Gemini); `.message`
+    // solo es el texto que ve el editor y no basta para depurar — antes se
+    // perdía el detalle y toda falla del router se veía igual en la traza.
+    const detalle = e instanceof ErrorBuscar
+      ? (e.detalle ?? e.message)
+      : e instanceof Error ? e.message : String(e);
     const respaldo = await clasificarRespaldo(pregunta, 'el clasificador no respondió');
     respaldo.avisos.push({
       codigo: 'ROUTER_DEGRADADO',

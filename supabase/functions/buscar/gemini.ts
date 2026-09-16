@@ -47,15 +47,40 @@ interface OpcionesLlamada<T> {
  * `responseSchema` acepta un subconjunto de OpenAPI, NO JSON Schema completo:
  * con `additionalProperties` —que el modo estricto de Anthropic sí exige— la
  * petición falla con 400 y un mensaje genérico. Se podan esas palabras clave.
+ *
+ * Verificado en vivo (2026-09-17): `type: ['integer', 'null']` —válido en
+ * JSON Schema, y lo que usa `anio_pub_desde`/`anio_pub_hasta` en
+ * ESQUEMA_ROUTER— también tumba la petición con 400 ("Proto field is not
+ * repeating, cannot start list"). Gemini no soporta `type` como arreglo; el
+ * nulable se marca con `nullable: true` junto a un `type` único. Esto hacía
+ * que el router con IA (escalón 3) fallara SIEMPRE que llegaba a llamarse, en
+ * silencio hacia el editor: degradaba a las reglas y lo avisaba en la traza,
+ * pero nunca se corrigió la causa. Se resuelve aquí, en el transformador
+ * genérico, para cubrir cualquier esquema futuro con el mismo patrón.
  */
 export function aEsquemaGemini(nodo: unknown): unknown {
   if (Array.isArray(nodo)) return nodo.map(aEsquemaGemini);
   if (!nodo || typeof nodo !== 'object') return nodo;
 
   const fuera = new Set(['additionalProperties', '$schema', 'strict', 'default', 'examples', 'title']);
+  const obj = nodo as Record<string, unknown>;
+
+  // `type: [X, 'null']` (o el orden inverso) → `type: X, nullable: true`.
+  let tipoNulable: string | null = null;
+  if (Array.isArray(obj.type) && obj.type.length === 2 && obj.type.includes('null')) {
+    const otro = obj.type.find((t) => t !== 'null');
+    if (typeof otro === 'string') tipoNulable = otro;
+  }
+
   const salida: Record<string, unknown> = {};
-  for (const [clave, valor] of Object.entries(nodo as Record<string, unknown>)) {
-    if (!fuera.has(clave)) salida[clave] = aEsquemaGemini(valor);
+  for (const [clave, valor] of Object.entries(obj)) {
+    if (fuera.has(clave)) continue;
+    if (clave === 'type' && tipoNulable) {
+      salida.type = tipoNulable;
+      salida.nullable = true;
+      continue;
+    }
+    salida[clave] = aEsquemaGemini(valor);
   }
   return salida;
 }

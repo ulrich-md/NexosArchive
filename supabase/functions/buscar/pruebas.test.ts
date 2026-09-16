@@ -29,6 +29,7 @@ import { validarClasificacion, validarRerank, validarSintesis } from './validaci
 import { literalArreglo } from './carriles/comun.ts';
 import { fusionRrf } from './carriles/hibrida.ts';
 import { normalizarPaginacion } from './carriles/catalogo.ts';
+import { aEsquemaGemini } from './gemini.ts';
 import { decidirHeuristica, emparejarAutores } from './router.ts';
 import { temaResidual as residualDe } from './texto.ts';
 import type { FilaArticulo } from './tipos.ts';
@@ -170,6 +171,24 @@ Deno.test('validarRerank solo devuelve ids permitidos y respeta el tope', () => 
 });
 
 // --- SQL y fusión -----------------------------------------------------------
+
+Deno.test('aEsquemaGemini convierte type:[X,"null"] en type:X + nullable', () => {
+  // Regresión real (2026-09-17): Gemini rechaza `type` como arreglo con un
+  // 400 "Proto field is not repeating, cannot start list" — esto hacía que
+  // el router con IA fallara SIEMPRE que llegaba a llamarse.
+  const esquema = aEsquemaGemini({
+    type: 'object',
+    properties: {
+      anio_pub_desde: { type: ['integer', 'null'], description: 'x' },
+      modo: { type: 'string', enum: ['a', 'b'] },
+    },
+  }) as { properties: Record<string, Record<string, unknown>> };
+
+  assertEquals(esquema.properties.anio_pub_desde.type, 'integer');
+  assertEquals(esquema.properties.anio_pub_desde.nullable, true);
+  // Un campo sin type-arreglo no debe ganar `nullable` de la nada.
+  assertEquals(esquema.properties.modo.nullable, undefined);
+});
 
 Deno.test('literalArreglo entrecomilla cada elemento', () => {
   assertEquals(literalArreglo(['Ángeles Mastretta']), '{"Ángeles Mastretta"}');

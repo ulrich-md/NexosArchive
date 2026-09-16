@@ -13,7 +13,7 @@
 
 import {
   MAX_TOKENS_SINTESIS,
-  MODELO_SINTESIS,
+  MODELOS_GEMINI,
   PANORAMA_MAX_FILAS,
   PANORAMA_MIN_FILAS,
   TIMEOUT_SINTESIS_MS,
@@ -239,8 +239,9 @@ async function redactarSintesis(
       : '',
   ].filter(Boolean).join('\n\n');
 
+  let modeloUsado = MODELOS_GEMINI[0];
   const cruda = await llamarConHerramienta({
-    modelo: MODELO_SINTESIS,
+    modelos: MODELOS_GEMINI,
     sistema: SISTEMA_SINTESIS,
     usuario,
     maxTokens: MAX_TOKENS_SINTESIS,
@@ -256,13 +257,14 @@ async function redactarSintesis(
       input_schema: ESQUEMA_SINTESIS as unknown as Record<string, unknown>,
     },
     validar: (crudo) => validarSintesis(crudo, idsPermitidos),
+    onModelo: (m) => { modeloUsado = m; },
   });
 
   return {
     texto: cruda.texto,
     temas: cruda.temas,
     fichas_consideradas: filas.length,
-    modelo: MODELO_SINTESIS,
+    modelo: modeloUsado,
   };
 }
 
@@ -335,7 +337,7 @@ export async function carrilPanorama(
     pasos.push({
       paso: 'sintesis',
       titulo: `Agrupó ${filas.length} fichas en ${sintesis.temas.length} temáticas`,
-      detalle: `${MODELO_SINTESIS} · una sola llamada`,
+      detalle: `${sintesis.modelo} · una sola llamada`,
       ms: Math.round(performance.now() - t0),
     });
 

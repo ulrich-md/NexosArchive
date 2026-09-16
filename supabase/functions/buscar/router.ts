@@ -14,7 +14,7 @@
 // Si no hay llave de Anthropic, el escalón 3 no truena: cae a una clasificación
 // determinista y lo dice con un aviso.
 
-import { MAX_TOKENS_ROUTER, MODELO_ROUTER, TIMEOUT_ROUTER_MS } from './config.ts';
+import { MAX_TOKENS_ROUTER, MODELOS_GEMINI, TIMEOUT_ROUTER_MS } from './config.ts';
 import { catalogoAutores, resolverAutor, type AutorResuelto } from './bd.ts';
 import { ErrorBuscar } from './errores.ts';
 import { hayModelo, llamarConHerramienta } from './gemini.ts';
@@ -237,11 +237,15 @@ async function clasificarConLlm(pregunta: string): Promise<Clasificacion> {
   ].join('\n');
 
   const crudo = await llamarConHerramienta({
-    modelo: MODELO_ROUTER,
+    modelos: MODELOS_GEMINI,
     sistema,
     usuario: `<pregunta>\n${pregunta.replace(/[<>]/g, ' ')}\n</pregunta>`,
     maxTokens: MAX_TOKENS_ROUTER,
     timeoutMs: TIMEOUT_ROUTER_MS,
+    // Clasificar no se beneficia de pensamiento extendido, y MAX_TOKENS_ROUTER
+    // es chico (1024): sin esto, el pensamiento se lo come antes de llegar al
+    // JSON de la respuesta.
+    pensamientoApagado: true,
     herramienta: {
       name: 'clasificar_consulta',
       description: 'Clasifica la consulta de un editor de Nexos en uno de los tres carriles.',

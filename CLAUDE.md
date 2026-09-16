@@ -386,6 +386,31 @@ es suficiente para notar un fallo sistémico — hay que mirar el `detalle` real
 del error, no solo el mensaje genérico. `router.ts` también perdía ese detalle
 (guardaba `error.message`, no `error.detalle`) y quedó corregido en el mismo
 cambio.
+
+### Rotación de modelos en vivo, no solo en el enriquecimiento (2026-09-17)
+
+Con el bug de arriba corregido, el router en producción seguía degradando:
+la cuota gratuita de Gemini es de **20 peticiones al día por modelo**, y con
+un solo modelo (`gemini-2.5-flash`) eso se agota rápido en uso real, mucho
+antes de que termine el día. `scripts/enriquecer.ts` ya resolvía esto para el
+enriquecimiento masivo rotando entre siete modelos flash; `gemini.ts`
+(`supabase/functions/buscar/`) ahora hace lo mismo para el router, panorama y
+el rerank de fase 2, que antes llamaban cada uno a un solo `MODELO_*` fijo.
+
+`llamarConHerramienta` recibe `modelos: string[]` (antes `modelo: string`) y
+prueba la lista en orden: si un modelo devuelve 429 de cuota DIARIA, se marca
+agotado para el resto de la vida del isolate y se prueba el siguiente; un 429
+por MINUTO no marca el modelo, porque se pasa solo. Ningún otro tipo de error
+(esquema roto, respuesta inválida, llave mala) mueve al siguiente modelo: se
+repetiría igual, así que se corta ahí y se avisa de una vez, en vez de gastar
+cuota de seis modelos más en un error que no es de cuota.
+
+Verificado en vivo, no solo por tipos: con `gemini-2.5-flash` ya agotado por
+las pruebas del día, una llamada real a `llamarConHerramienta` saltó sola a
+`gemini-3-flash-preview` y respondió bien.
+
+`MODELOS_GEMINI` (`config.ts`) reemplaza a `MODELO_ROUTER`/`MODELO_SINTESIS`/
+`MODELO_RERANK`, que apuntaban los tres al mismo modelo de todos modos.
 ---
 ## 5. Esquema
 ```sql

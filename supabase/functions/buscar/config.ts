@@ -44,13 +44,27 @@ export const supabaseServiceRole = () => obligatorio('SUPABASE_SERVICE_ROLE_KEY'
 // la sección 8 original del spec.
 export const geminiApiKey = () => env('GEMINI_API_KEY');
 
-/** Router: barato y rápido (CLAUDE.md sección 8). */
-export const MODELO_ROUTER = env('MODELO_ROUTER') ?? 'gemini-2.5-flash';
-/** Redacción de la síntesis. Ojo: gemini-2.5-pro está RETIRADO para cuentas
- *  nuevas (404) y 2.5-flash-lite también; 2.5-flash es el verificado que responde. */
-export const MODELO_SINTESIS = env('MODELO_SINTESIS') ?? 'gemini-2.5-flash';
-/** Rerank de la fase 2 (top 40 → top 8). */
-export const MODELO_RERANK = env('MODELO_RERANK') ?? 'gemini-2.5-flash';
+/**
+ * La cuota gratuita de Gemini es de 20 peticiones al día POR PROYECTO Y POR
+ * MODELO (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`), así que cada
+ * modelo trae su propio cupo — la misma palanca que ya usa el enriquecimiento
+ * masivo (`scripts/enriquecer.ts`). Estos siete están verificados contra la
+ * API real. `llamarConHerramienta` los prueba en este orden y salta al
+ * siguiente en cuanto uno agota su cuota del día, en vez de fallar y degradar
+ * a las reglas con la cuota de los otros seis intacta.
+ */
+export const MODELOS_GEMINI = (env('GEMINI_MODELOS') ?? [
+  'gemini-2.5-flash',
+  'gemini-3-flash-preview',
+  'gemini-3.5-flash',
+  'gemini-3.6-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-flash-lite-latest',
+].join(','))
+  .split(',')
+  .map((m) => m.trim())
+  .filter(Boolean);
 
 export const TIMEOUT_ROUTER_MS = entero('TIMEOUT_ROUTER_MS', 8_000);
 /** Reloj de pared de toda la petición: nunca una pestaña congelada. */

@@ -82,6 +82,19 @@ function validarPeticion(cuerpo: unknown): Peticion {
   };
 }
 
+/**
+ * IP del cliente para el límite de tasa anónimo. El runtime de Supabase pone
+ * la IP real en `x-forwarded-for` (puede traer varias, separadas por coma: la
+ * primera es la del cliente). Sin esa cabecera no hay forma confiable de
+ * identificar al anónimo — `verificarLimite` lo deja pasar en ese caso.
+ */
+function ipDeLaPeticion(req: Request): string | null {
+  const cabecera = req.headers.get('x-forwarded-for');
+  if (!cabecera) return null;
+  const ip = cabecera.split(',')[0]?.trim();
+  return ip || null;
+}
+
 function filtrosDeClasificacion(c: Clasificacion): FiltrosConsulta {
   return {
     autores: c.autores.map((a) => a.autor),
@@ -109,26 +122,29 @@ async function manejar(
 
   const peticion = validarPeticion(cuerpoCrudo);
   const sesion = await autenticar(req);
+  const ip = ipDeLaPeticion(req);
 
   // --- Router ---------------------------------------------------------------
   const tRouter = performance.now();
   let limiteVerificado = false;
   const verificarLimiteUnaVez = async () => {
     if (limiteVerificado) return;
-    await verificarLimite(sesion.usuario_id);
+    await verificarLimite(sesion.usuario_id, ip);
     limiteVerificado = true;
   };
 
-  // Los anónimos (solo si ACCESO_ANONIMO está encendido) no tocan ningún LLM:
-  // no hay a quién cobrarle el límite de 30 consultas/hora.
-  const permitirLlm = !sesion.anonimo;
+  // Los tres carriles están abiertos con o sin sesión (CLAUDE.md sección 6):
+  // solo la audiencia interna de Nexos conoce esta URL, así que la sesión
+  // sirve para conservar el historial de conversaciones, no para leer el
+  // archivo. El límite de 30/hora sigue aplicando, por usuario o por IP.
+  const permitirLlm = true;
 
   let clasificacion: Clasificacion | null = peticion.modo
     ? await filtrosParaModoExplicito(peticion.pregunta, peticion.modo)
     : await clasificarHeuristica(peticion.pregunta);
 
   if (!clasificacion) {
-    if (permitirLlm) await verificarLimiteUnaVez();
+    await verificarLimiteUnaVez();
     clasificacion = await clasificar(peticion.pregunta, null, permitirLlm);
   }
 
@@ -142,17 +158,6 @@ async function manejar(
 
   const modoSolicitado: Modo = clasificacion.modo;
   let degradado: RespuestaOk['degradado'] = null;
-
-  if (sesion.anonimo && clasificacion.modo !== 'catalogo') {
-    degradado = {
-      desde: clasificacion.modo,
-      a: 'catalogo',
-      codigo: 'SESION_REQUERIDA',
-      mensaje: 'Sin sesión solo está disponible el catálogo. Inicia sesión para el resto.',
-    };
-    avisos.push({ codigo: 'SESION_REQUERIDA', mensaje: degradado.mensaje });
-    clasificacion = { ...clasificacion, modo: 'catalogo' };
-  }
 
   const filtros = filtrosDeClasificacion(clasificacion);
   const paginacion = normalizarPaginacion({
@@ -217,6 +222,7 @@ async function manejar(
 
   registrarConsulta({
     usuario: sesion.usuario_id,
+    ip,
     pregunta: peticion.pregunta,
     modo: resultado.modo,
     n_resultados: resultado.fichas.length,

@@ -442,28 +442,35 @@ Si el archivo se filtra, se acabó el proyecto. Esto manda sobre cualquier conve
 - El texto del archivo que entra a un prompt es **dato, nunca instrucción**. Delimitarlo
   con etiquetas y declararlo en el system prompt. Nunca renderizar HTML devuelto por el modelo.
 - Rotar el Application Password de WordPress al terminar la carga inicial.
-### ⚠️ ACCESO_ANONIMO está ENCENDIDO (2026-09-08)
+### ACCESO_ANONIMO: decisión definitiva, no un parche temporal (2026-09-16)
 
-A petición del dueño del proyecto, para poder usar la app sin resolver todavía
-el login, el secret `ACCESO_ANONIMO=true` está puesto en la Edge Function. Sin
-sesión el usuario obtiene **solo el carril `catalogo`**: cero llamadas a un LLM
-(no hay a quién cobrarle el límite de 30/hora) y una degradación declarada,
-`SESION_REQUERIDA`, en vez de un rechazo mudo.
+`ACCESO_ANONIMO=true` en la Edge Function es el **modo previsto para
+producción**, no algo por apagar. Decisión explícita del dueño del proyecto:
+solo los administradores de Nexos van a conocer esta URL, así que la sesión
+no es la puerta de acceso al archivo — es solo lo que conserva el historial
+de conversaciones entre visitas (el sidebar ya lo decía: "Inicia sesión para
+conservar tus conversaciones"). Sin sesión, los tres carriles (`catalogo`,
+`panorama`, `hibrida`) responden igual que con sesión.
 
-**Hay que apagarlo antes de cualquier despliegue público**, porque contradice
-esta sección: hoy cualquiera con la URL de la función lee la metadata del
-archivo. Mientras corre en localhost el riesgo es acotado —son títulos, autores
-y fechas, que ya son públicos en nexos.com.mx; los cuerpos no están en la base—
-pero en producción no va.
+Esto revierte una versión anterior de esta sección (2026-09-08) que solo
+dejaba pasar `catalogo` a los anónimos y exigía apagar la bandera antes de
+cualquier despliegue público. Con el nuevo alcance, lo que hay que sostener
+es otra cosa: el límite de 30 consultas/hora (sección 6, arriba) seguía
+identificando al usuario por su `uuid`, y un anónimo no tiene uno.
+Migración `0004_acceso_anonimo_completo.sql` agrega `consultas.ip`, y
+`verificarLimite()` cuenta por IP (`x-forwarded-for`) cuando no hay sesión, en
+vez de dejar sin límite a los carriles que llaman a un LLM.
 
-```bash
-npx supabase secrets set ACCESO_ANONIMO=false --project-ref tedudsobbqjmgulzksmw
-```
+Lo que la anonimidad NO cambia: sigue sin haber ninguna policy de SELECT para
+`anon`/`authenticated` sobre las tablas (verificado: la anon key devuelve 0
+filas contra `/rest/v1/articulos`), y toda lectura sigue pasando por esta
+función con service role. Lo que se abrió fue la función, no la base.
 
 Nota relacionada: **Google OAuth está deshabilitado** en el proyecto, así que el
 botón del sidebar no puede funcionar. El login por correo sí está habilitado, y
 es además lo que pide esta sección (magic link con lista blanca de dominio),
-así que es el camino más corto cuando se retome.
+así que es el camino más corto cuando se retome — para guardar historial, no
+para leer el archivo.
 
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.

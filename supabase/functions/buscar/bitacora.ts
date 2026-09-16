@@ -8,8 +8,10 @@ import { ErrorBuscar, errorBd } from './errores.ts';
 import type { Modo } from './tipos.ts';
 
 /**
- * Límite de 30 consultas por hora y por usuario en todo carril que llame a un
- * LLM (CLAUDE.md sección 6).
+ * Límite de 30 consultas por hora en todo carril que llame a un LLM
+ * (CLAUDE.md sección 6). Con sesión se cuenta por usuario; sin sesión
+ * (ACCESO_ANONIMO) se cuenta por IP, porque `consultas.usuario` es una FK a
+ * `auth.users` y no puede guardar nada más — de ahí la columna `ip` aparte.
  *
  * Nota de implementación: `consultas` no tiene columna para marcar "esta
  * consulta gastó LLM", y el esquema no se toca desde aquí. Se cuenta entonces
@@ -18,17 +20,20 @@ import type { Modo } from './tipos.ts';
  * corta y barata) puede correr para una consulta que termina en `catalogo` y
  * no consume cuota: es un subconteo acotado y deliberado, no un descuido.
  */
-export async function verificarLimite(usuarioId: string | null): Promise<void> {
-  if (!usuarioId) return; // los anónimos no llegan a los carriles con LLM
-  const desde = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+export async function verificarLimite(usuarioId: string | null, ip: string | null): Promise<void> {
+  // Sin usuario ni IP (cabecera ausente, caso raro) no hay a quién limitar:
+  // se deja pasar en vez de bloquear a ciegas a todo el tráfico anónimo.
+  if (!usuarioId && !ip) return;
 
-  const { count, error } = await bd()
+  const desde = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  let consulta = bd()
     .from('consultas')
     .select('id', { count: 'exact', head: true })
-    .eq('usuario', usuarioId)
     .neq('modo', 'catalogo')
     .gt('creada_en', desde);
+  consulta = usuarioId ? consulta.eq('usuario', usuarioId) : consulta.eq('ip', ip);
 
+  const { count, error } = await consulta;
   if (error) throw errorBd('conteo de consultas para el límite', error);
 
   const usadas = count ?? 0;
@@ -47,6 +52,7 @@ export async function verificarLimite(usuarioId: string | null): Promise<void> {
 
 interface RegistroConsulta {
   usuario: string | null;
+  ip: string | null;
   pregunta: string;
   modo: Modo;
   n_resultados: number;
@@ -65,6 +71,7 @@ export function registrarConsulta(registro: RegistroConsulta): void {
       .from('consultas')
       .insert({
         usuario: registro.usuario,
+        ip: registro.ip,
         pregunta: registro.pregunta.slice(0, 2_000),
         modo: registro.modo,
         n_resultados: registro.n_resultados,

@@ -67,9 +67,12 @@ export const DOMINIOS_PERMITIDOS = (env('DOMINIOS_PERMITIDOS') ?? 'nexos.com.mx'
   .filter(Boolean);
 
 /**
- * Acceso sin sesión. Apagado por defecto: el archivo es contenido de pago.
- * Si se enciende, los anónimos SOLO tienen el carril `catalogo` (cero LLM),
- * porque no hay a quién cobrarle el límite de 30 consultas/hora.
+ * Acceso sin sesión a los tres carriles. Apagado por defecto (el archivo es
+ * contenido de pago), pero es el modo previsto para producción: solo lo
+ * conocerán los administradores de Nexos, así que la sesión no es la puerta
+ * de acceso al archivo, es solo lo que conserva el historial de
+ * conversaciones entre visitas (CLAUDE.md sección 6). El límite de 30
+ * consultas/hora sigue aplicando a los anónimos, por IP en vez de por usuario.
  */
 export const ACCESO_ANONIMO = bandera('ACCESO_ANONIMO', false);
 

@@ -241,6 +241,30 @@ lector, evita el paywall al navegar el sitio). Eso **no** es lo mismo que un App
 Password de WordPress para la REST API — habría que verificar con Nexos si esa cuenta
 puede generarse un Application Password, o si hace falta pedir credenciales de API aparte.
 No asumir que la suscripción por sí sola desbloquea `content` en `/wp-json`.
+### `resumen_linea IS NULL` no significa "pendiente" (2026-09-16)
+
+Un reporte de avance contó cuántos artículos de `www` tenían `resumen_linea` vacío
+y lo llamó "faltan 1,480". Es falso: la cifra real de artículos que **nunca han
+pasado por el enriquecimiento** era **87**. La diferencia, 1,393 artículos, ya
+fueron procesados por el modelo —tienen `temas` y a veces `tipo_texto`— pero son
+poemas, aforismos o notas cortas donde no hay materia para un resumen de una
+línea, y el código los deja así **a propósito**, por la regla anti-alucinación
+de la sección 7 (nunca inventar un resumen que no existe). `estaVacio()` en
+`scripts/lib/enriquecimiento.ts` solo marca un artículo como `'vacio'` en la
+bitácora si **los cuatro campos** (resumen, temas, años, tipo) salen vacíos; si
+el modelo llenó aunque sea uno, queda `'ok'` con `resumen_linea` en null a
+propósito.
+
+Consecuencia práctica que costó tiempo: subir más exports XML de esos años no
+ayuda si el verdadero cuello de botella no es falta de cuerpo, sino artículos ya
+catalogados sin resumen. Antes de pedir más datos de entrada, hay que confirmar
+contra la bitácora (`datos/enriquecidos.jsonl`), no contra la columna.
+
+**La única fuente de verdad sobre qué falta procesar es la bitácora, nunca la
+columna `resumen_linea` por sí sola.** `npm run cobertura` calcula el backlog
+real (por sitio y por año) cruzando `articulos` contra `datos/enriquecidos.jsonl`,
+y es lo que hay que correr en vez de armar un script desechable cada vez.
+
 ### Reglas de ingesta (aquí es donde falló Lovable)
 - Paginar `?per_page=100&page=N`. Son ~192 páginas. Guardar `X-WP-TotalPages` al inicio.
 - **Reanudable**: persistir `ultima_pagina` después de *cada* página, no al final.

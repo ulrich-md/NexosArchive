@@ -360,6 +360,32 @@ Mandar esto al RAG es pagar latencia por un `WHERE`.
 "Qué se escribió sobre el 2006" usa `anios_referidos`. Lo mejor que Nexos publicó
 sobre 2006 salió en 2016 y en 2021. Filtrar por `anio_pub` se comería exactamente
 los textos que el editor quiere. Ante la duda, no acotar la publicación.
+
+### El escalón 3 del router (Gemini) fallaba siempre, en silencio (2026-09-17)
+
+`ESQUEMA_ROUTER` declara `anio_pub_desde`/`anio_pub_hasta` como
+`type: ['integer', 'null']` — válido en JSON Schema, y así es como se escribe
+un campo nulable en el `input_schema` que antes usaba Anthropic. Pero
+`responseSchema` de Gemini no acepta `type` como arreglo: la petición
+truena con 400, `"Proto field is not repeating, cannot start list"`
+(confirmado llamando a la API real con el esquema exacto, no una hipótesis).
+
+Consecuencia: cada vez que la heurística (escalón 2) no resolvía la consulta
+y le tocaba a Gemini clasificarla, la llamada fallaba, el router degradaba a
+reglas simples y lo avisaba en la traza ("El clasificador falló") — pero
+nadie leyó esa traza como sistémica hasta verlo repetirse en vivo. El escalón
+3 probablemente **nunca funcionó** desde que se escribió.
+
+Se arregla en `aEsquemaGemini()` (`gemini.ts`), el transformador genérico que
+ya podaba palabras clave que Gemini no soporta: ahora además convierte
+`type: [X, 'null']` en `type: X, nullable: true` para cualquier esquema, no
+solo el del router. Prueba de regresión en `pruebas.test.ts`.
+
+Lección: un aviso en la traza que dice "degradó a reglas" es correcto pero no
+es suficiente para notar un fallo sistémico — hay que mirar el `detalle` real
+del error, no solo el mensaje genérico. `router.ts` también perdía ese detalle
+(guardaba `error.message`, no `error.detalle`) y quedó corregido en el mismo
+cambio.
 ---
 ## 5. Esquema
 ```sql

@@ -102,6 +102,18 @@ const SOLO_CON_CUERPO = process.argv.includes('--solo-con-cuerpo');
 const SITIO = process.argv.find((a) => a.startsWith('--sitio='))?.split('=')[1] ?? null;
 
 /**
+ * Acota por año de publicación. Sirve para partir el trabajo entre procesos
+ * paralelos sin que se peleen por los mismos pendientes: el proceso principal
+ * construye su lista de pendientes UNA SOLA VEZ al arrancar y la recorre en
+ * orden de id (≈ cronológico), así que un segundo proceso sin acotar por año
+ * volvería a traerse casi la misma lista completa —no la cola restante— y
+ * procesaría en paralelo justo lo que el primero ya tiene en su cola. Filtrar
+ * por año hace que cada proceso tenga su propio carril.
+ */
+const DESDE_ANIO = argNumero('desde-anio', 0) || null;
+const HASTA_ANIO = argNumero('hasta-anio', 0) || null;
+
+/**
  * Cuerpos tomados de las exportaciones WXR en vez de la API. Es la única fuente
  * para el archivo impreso: la API lo devuelve vacío porque el plugin de
  * membresía tapa `the_content`, pero la exportación lee `wp_posts` directo.
@@ -408,6 +420,8 @@ async function traerPendientes(supabase: Supabase, cursor: number): Promise<Arti
     .gt('id', cursor);
 
   if (SITIO) q = q.eq('sitio', SITIO);
+  if (DESDE_ANIO) q = q.gte('anio_pub', DESDE_ANIO);
+  if (HASTA_ANIO) q = q.lte('anio_pub', HASTA_ANIO);
 
   const { data, error } = await q.order('id', { ascending: true }).limit(PAGINA_DB);
   if (error) throw new Error(`Error leyendo articulos pendientes: ${error.message}`);

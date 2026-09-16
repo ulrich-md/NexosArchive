@@ -18,3 +18,7 @@ logs/*.log
 # proyecto; el script que los crea los borra al terminar.
 _*.mts
 logs/*.txt
+
+# Caché local del CLI de Supabase (detecta la versión de Postgres al hacer
+# link/db push). No es contenido del proyecto.
+supabase/.temp/

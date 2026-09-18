@@ -23,8 +23,11 @@ import type { IconoTraza, PasoTraza } from '@/lib/contrato';
  * paso a paso, una sola vez al llegar la respuesta —no en bucle indefinido,
  * que en una conversación larga con varios turnos sería una fila de tickers
  * parpadeando a la vez— y se queda fijo en el resumen ("Consultó el archivo
- * · N pasos"). Un clic expande el detalle completo, con hora y línea vertical,
- * igual que antes: un editor no confía en una caja negra.
+ * · N pasos"). El ritmo es deliberadamente pausado (~3 s de recorrido total,
+ * no un parpadeo) y cada cambio de paso funde en vez de saltar, para que se
+ * lea como el mismo "pensando" gradual del chat, no como una notificación.
+ * Un clic expande el detalle completo, con hora y línea vertical, igual que
+ * antes: un editor no confía en una caja negra.
  */
 
 const ICONOS: Record<IconoTraza, LucideIcon> = {
@@ -36,7 +39,9 @@ const ICONOS: Record<IconoTraza, LucideIcon> = {
   redaccion: PenLine,
 };
 
-const RITMO_MS = 480;
+// ~3 s de recorrido total para una traza típica de 3-4 pasos, gradual, no un
+// parpadeo (pedido explícito tras verlo en vivo).
+const RITMO_MS = 900;
 
 /** Recorre los pasos una sola vez, ~RITMO_MS entre cada uno, y se detiene en
  *  el último. `prefers-reduced-motion` salta directo al final. */
@@ -127,8 +132,15 @@ export function TrazaRecuperacion({ pasos }: { pasos: PasoTraza[] }) {
         )}
 
         {!abierta && ciclando ? (
-          <span key={indiceCiclo} className="flex min-w-0 items-center gap-1.5 motion-safe:animar-aparecer">
-            <IconoActual className="h-3 w-3 shrink-0 text-primary" strokeWidth={1.75} aria-hidden />
+          <span
+            key={indiceCiclo}
+            className="flex min-w-0 items-center gap-1.5 motion-safe:animar-aparecer-lenta"
+          >
+            <IconoActual
+              className="h-3 w-3 shrink-0 text-primary motion-safe:animar-brillo"
+              strokeWidth={1.75}
+              aria-hidden
+            />
             <span className="truncate">{pasoActual.titulo}</span>
           </span>
         ) : (

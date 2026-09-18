@@ -3,11 +3,10 @@ import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-rea
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { FichaArticulo } from '@/components/FichaArticulo';
-import { FiltrosBusqueda } from '@/components/FiltrosBusqueda';
 import { TextoRespuesta } from '@/components/TextoRespuesta';
 import { TrazaRecuperacion } from '@/components/TrazaRecuperacion';
 import { ArchivoVacio, CargandoRespuesta, ErrorRespuesta } from '@/components/Estados';
-import type { RespuestaBuscar, RespuestaFacetas } from '@/lib/contrato';
+import type { RespuestaBuscar } from '@/lib/contrato';
 import { ErrorConsulta } from '@/lib/api';
 import { conMiles, urlBusquedaNexos } from '@/lib/utilidades';
 
@@ -114,18 +113,14 @@ function ListaArticulos({
 
 export function BloqueRespuesta({
   turno,
-  facetas,
   onReintentar,
   onCancelar,
   onPagina,
-  onFiltro,
 }: {
   turno: Turno;
-  facetas: RespuestaFacetas | null;
   onReintentar: () => void;
   onCancelar: () => void;
   onPagina: (pagina: number) => void;
-  onFiltro: (pregunta: string) => void;
 }) {
   const r = turno.respuesta;
 
@@ -179,8 +174,6 @@ export function BloqueRespuesta({
                 ) : null}
               </p>
             ) : null}
-
-            <FiltrosBusqueda facetas={facetas} deshabilitado={turno.paginando} onFiltro={onFiltro} />
 
             <ListaArticulos respuesta={r} paginando={turno.paginando} onPagina={onPagina} />
 

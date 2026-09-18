@@ -338,6 +338,43 @@ Referencia viva: `https://archivonexos.online/`. Tokens extraídos del CSS de pr
    - `¿Qué se ha escrito en Nexos sobre el 2006?`
    - `Artículos de 1988 sobre fraude electoral`
    - `Todo lo que publicó Ángeles Mastretta en los noventa`
+
+### Sin chips de modo, sidebar sin login para guardar, ritmo del "pensando" (2026-09-18)
+
+Dos correcciones a lo de arriba, pedidas explícitamente tras verlo en vivo:
+
+- **La mejora 4 ("tres chips de modo") ya no existe.** El dueño pidió "que no
+  haya diferentes modos de búsqueda": el router de la sección 4 sigue
+  clasificando internamente (`panorama`/`hibrida`/`catalogo`), pero eso nunca
+  se expone al editor — ni como chip, ni como etiqueta en la traza, ni en el
+  texto de la respuesta. Un editor hace una pregunta; el carril es un detalle
+  de implementación.
+- **Los filtros desplegables bajo la lista de artículos** (`Autor…` /
+  `Sección…` / `Década…`, un componente aparte de las pestañas del sidebar)
+  se quitaron: duplicaban exactamente lo que ya hacen las pestañas
+  `Autores` · `Secciones` · `Décadas` de la sección 3, y con dos caminos para
+  lo mismo el visualmente más débil (el `<select>` nativo, bajo contraste)
+  perdía sentido en vez de arreglarse.
+- **Las conversaciones ya no dependen de iniciar sesión.** Se guardan solas
+  en `localStorage` de ese navegador (mismos 7 días de retención que ya
+  describía el spec, ahora aplicados siempre, no solo prometidos si había
+  sesión) y se restauran al volver a abrir la pestaña. El bloque
+  `CONVERSACIONES` / "Inicia sesión para conservar tus conversaciones" y el
+  botón grande "Guardar conversaciones / Inicia sesión con Google" se
+  quitaron del todo: Google queda como una liga chica junto a
+  `nexos.com.mx ↗`, al fondo del sidebar — una opción menor, no la puerta de
+  entrada (coherente con la decisión de ACCESO_ANONIMO de la sección 6: la
+  sesión nunca fue la llave del archivo).
+- **El "pensando" y la traza colapsada van más lento y gradual** (pedido
+  explícito: "que no te lleve hasta abajo... que vaya bajando de forma
+  natural" ya se había resuelto antes; esta vuelta fue sobre el ritmo de la
+  animación en sí). Antes cambiaban de frase cada 480 ms/2.2 s con un salto
+  seco; ahora cada swap funde con `animar-aparecer-lenta` (~0.9 s) sobre un
+  ritmo de ~3 s por paso — se lee como el "pensando" gradual de un chat, no
+  como una notificación parpadeando.
+- **`CATALOGO_POR_PAGINA` bajó de 10 a 4** (`supabase/functions/buscar/config.ts`):
+  la lista de artículos abre mostrando 4 y pagina el resto, en vez de una
+  primera pantalla larga.
 ---
 ## 4. Los tres modos de consulta
 El error de arquitectura más caro sería mandar todo al mismo pipeline de RAG.

@@ -10,6 +10,11 @@ import { Button } from '@/components/ui/button';
 import { ErrorConsulta, MS_AVISO_LENTO, MS_LIMITE, buscar, facetas as pedirFacetas } from '@/lib/api';
 import type { RespuestaFacetas } from '@/lib/contrato';
 import {
+  borrarConversacionGuardada,
+  cargarConversacionGuardada,
+  guardarConversacion,
+} from '@/lib/conversacion';
+import {
   alCambiarSesion,
   cerrarSesion,
   iniciarSesionGoogle,
@@ -24,7 +29,7 @@ function nuevoId() {
 
 export default function App() {
   const [texto, setTexto] = useState('');
-  const [turnos, setTurnos] = useState<Turno[]>([]);
+  const [turnos, setTurnos] = useState<Turno[]>(() => cargarConversacionGuardada());
   const [sidebarAbierta, setSidebarAbierta] = useState(true);
   const [menuMovil, setMenuMovil] = useState(false);
 
@@ -78,6 +83,12 @@ export default function App() {
   useEffect(() => {
     ultimoTurnoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [turnos.length]);
+
+  // Conversación por sesión de navegador: sin iniciar sesión, se guarda sola
+  // en este navegador y se descarta a los DIAS_RETENCION días.
+  useEffect(() => {
+    guardarConversacion(turnos);
+  }, [turnos]);
 
   // --- Consulta ------------------------------------------------------------
   const preguntar = useCallback(
@@ -190,6 +201,7 @@ export default function App() {
     setTurnos([]);
     setTexto('');
     setMenuMovil(false);
+    borrarConversacionGuardada();
   }
 
   async function acceder() {
@@ -287,11 +299,9 @@ export default function App() {
                 <div key={t.id} ref={i === turnos.length - 1 ? ultimoTurnoRef : undefined}>
                   <BloqueRespuesta
                     turno={t}
-                    facetas={facetas}
                     onReintentar={() => reintentar(t)}
                     onCancelar={cancelar}
                     onPagina={(pagina) => cambiarPagina(t, pagina)}
-                    onFiltro={(p) => enviar(p)}
                   />
                 </div>
               ))}

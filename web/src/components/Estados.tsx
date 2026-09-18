@@ -32,11 +32,19 @@ function Puntos() {
   );
 }
 
+// Ritmo pausado y gradual (~3 s por frase), como el "pensando" de un chat:
+// la frase anterior se funde en la siguiente en vez de saltar (pedido
+// explícito tras verlo en vivo).
+const RITMO_PENSANDO_MS = 3000;
+
 function Pensando() {
   const [paso, setPaso] = useState(0);
 
   useEffect(() => {
-    const t = setInterval(() => setPaso((p) => Math.min(p + 1, PASOS_ESPERA.length - 1)), 2200);
+    const t = setInterval(
+      () => setPaso((p) => Math.min(p + 1, PASOS_ESPERA.length - 1)),
+      RITMO_PENSANDO_MS,
+    );
     return () => clearInterval(t);
   }, []);
 
@@ -45,7 +53,9 @@ function Pensando() {
       <Puntos />
       <span className="text-foreground">Pensando</span>
       <span className="text-border">·</span>
-      <span className="text-muted-foreground">{PASOS_ESPERA[paso]}</span>
+      <span key={paso} className="text-muted-foreground motion-safe:animar-aparecer-lenta">
+        {PASOS_ESPERA[paso]}
+      </span>
     </div>
   );
 }

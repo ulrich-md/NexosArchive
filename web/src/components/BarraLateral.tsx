@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LogoNexos } from '@/components/LogoNexos';
-import { DIAS_RETENCION, PESTANAS, type PestanaId } from '@/lib/constantes';
+import { PESTANAS, type PestanaId } from '@/lib/constantes';
 import type { Faceta, RespuestaFacetas } from '@/lib/contrato';
 import type { Usuario } from '@/lib/sesion';
 import { cn, conMiles } from '@/lib/utilidades';
@@ -234,49 +234,21 @@ export function BarraLateral({
         )}
       </nav>
 
-      <div className="border-t-2 border-primary/30 bg-muted px-3 py-3">
-        <p className="mono-meta font-medium uppercase tracking-[0.14em] text-foreground">
-          Conversaciones
-        </p>
-        {usuario ? (
-          <p className="mt-2 text-sm text-muted-foreground">
+      {usuario ? (
+        <div className="border-t border-border px-3 py-3">
+          <p className="mb-2 text-sm text-muted-foreground">
             Sesión de {usuario.nombre ?? usuario.correo}.
           </p>
-        ) : (
-          <>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Inicia sesión para conservar tus conversaciones.
-            </p>
-            <p className="mono-meta mt-2 leading-relaxed text-muted-foreground">
-              Se guardan solo en este navegador y se eliminan a los {DIAS_RETENCION} días por costo
-              de almacenamiento.
-            </p>
-          </>
-        )}
-      </div>
-
-      <div className="space-y-3 border-t border-border px-3 py-3">
-        {usuario ? (
           <Button variant="contorno" onClick={onSalir} className="w-full justify-start gap-2">
             <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
             <span className="truncate">Cerrar sesión</span>
           </Button>
-        ) : (
-          <button
-            type="button"
-            onClick={onAcceder}
-            className="flex w-full items-start gap-2 rounded-md border border-border bg-surface px-3 py-2 text-left text-sm text-foreground transition-colors hover:border-primary hover:text-primary"
-          >
-            <LogIn className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
-            <span>
-              <strong className="font-medium">Guardar conversaciones</strong>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                Inicia sesión con Google
-              </span>
-            </span>
-          </button>
-        )}
+        </div>
+      ) : null}
 
+      {/* Las conversaciones se guardan solas en este navegador (sin sesión);
+          Google queda como una opción menor, no como la puerta de entrada. */}
+      <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border px-3 py-3">
         <a
           href="https://www.nexos.com.mx"
           target="_blank"
@@ -286,6 +258,16 @@ export function BarraLateral({
           nexos.com.mx
           <ExternalLink className="h-3 w-3" strokeWidth={1.75} aria-hidden />
         </a>
+        {!usuario ? (
+          <button
+            type="button"
+            onClick={onAcceder}
+            className="mono-meta flex items-center gap-1 text-muted-foreground hover:text-primary"
+          >
+            <LogIn className="h-3 w-3" strokeWidth={1.75} aria-hidden />
+            Google
+          </button>
+        ) : null}
       </div>
     </aside>
   );

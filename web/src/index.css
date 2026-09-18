@@ -144,6 +144,19 @@
   }
 }
 
+/* Swap de texto gradual, como el pensamiento de un chat: no es un fundido
+   brusco, cruza opacidad y un desplazamiento suave más largo. */
+@keyframes nx-aparecer-lenta {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes nx-desplegar {
   from {
     height: 0;
@@ -172,6 +185,10 @@
 
 @utility animar-aparecer {
   animation: nx-aparecer 0.45s ease-out;
+}
+
+@utility animar-aparecer-lenta {
+  animation: nx-aparecer-lenta 0.9s ease-out;
 }
 
 @utility animar-desplegar {

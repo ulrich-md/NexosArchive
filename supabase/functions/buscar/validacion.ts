@@ -144,6 +144,40 @@ export function validarClasificacion(crudo: unknown): ClasificacionCruda {
   };
 }
 
+// --- Seguimiento de conversación ---------------------------------------------
+
+export interface SeguimientoCrudo {
+  pregunta_resuelta: string;
+  depende_del_anterior: boolean;
+}
+
+export const ESQUEMA_SEGUIMIENTO = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['pregunta_resuelta', 'depende_del_anterior'],
+  properties: {
+    pregunta_resuelta: {
+      type: 'string',
+      description:
+        'La pregunta nueva reescrita como una consulta completa e independiente, incorporando ' +
+        'solo lo que hace falta de la pregunta anterior (autor, año, tema). Si la pregunta nueva ' +
+        'ya es independiente, se devuelve tal cual, sin inventar nada que no esté en ninguna de las dos.',
+    },
+    depende_del_anterior: {
+      type: 'boolean',
+      description: 'true solo si de verdad hacía falta la pregunta anterior para entender esta.',
+    },
+  },
+} as const;
+
+export function validarSeguimiento(crudo: unknown): SeguimientoCrudo {
+  if (!esObjeto(crudo)) throw invalido('La reformulación no es un objeto.');
+  return {
+    pregunta_resuelta: sanearTextoModelo(crudo.pregunta_resuelta, 500),
+    depende_del_anterior: crudo.depende_del_anterior === true,
+  };
+}
+
 // --- Síntesis del modo panorama ---------------------------------------------
 
 export interface SintesisCruda {

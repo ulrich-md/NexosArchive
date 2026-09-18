@@ -138,6 +138,24 @@ export function sanearTextoModelo(s: unknown, maxLargo = 1_200): string {
   return limpio.length > maxLargo ? `${limpio.slice(0, maxLargo - 1).trimEnd()}…` : limpio;
 }
 
+/**
+ * Señales baratas de que la pregunta depende de la anterior para entenderse
+ * (pronombres, continuadores: "¿y en 2010?", "de esos, cuáles son de
+ * mujeres", "también muéstrame los de economía"). Es una compuerta antes de
+ * gastar una llamada a Gemini en reescribirla: la mayoría de las preguntas en
+ * una conversación son NUEVAS e independientes, y pagar ese viaje en cada una
+ * rompería la promesa de <100ms de catálogo (CLAUDE.md sección 4). Un falso
+ * negativo (no detectar un seguimiento real) no es una regresión: hoy ninguna
+ * pregunta usa contexto previo, así que como mucho se queda igual.
+ */
+const PATRON_SEGUIMIENTO =
+  /^(y\s|tambien\b|ademas\b|de (esos|esas|ese|esa|eso)\b|sobre (eso|esos|esas)\b|lo mismo\b|igual\b|ahora\s|mas de (eso|esos|esas)\b|otros\s|otras\s)|\b(esos|esas|ellos|ellas|aquello)\b/;
+
+export function detectaSeguimiento(pregunta: string): boolean {
+  const texto = normalizar(pregunta);
+  return texto.length > 0 && PATRON_SEGUIMIENTO.test(texto);
+}
+
 /** Un texto del modelo con URLs es sospechoso: el modelo no escribe ligas. */
 export function contieneLiga(s: string): boolean {
   return /https?:\/\//i.test(s) || /www\./i.test(s) || /nexos\.com\.mx/i.test(s);

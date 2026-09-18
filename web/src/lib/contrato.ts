@@ -74,6 +74,13 @@ export interface SolicitudBuscar {
   modo?: Modo;
   pagina?: number;
   por_pagina?: number;
+  /**
+   * Pregunta del turno inmediatamente anterior de esta conversación. Con
+   * esto el backend puede resolver seguimientos ("¿y en 2010?", "de esos,
+   * cuáles son de mujeres") sin que el frontend interprete nada por su
+   * cuenta — la reformulación es responsabilidad del router.
+   */
+  pregunta_anterior?: string | null;
 }
 
 export interface RespuestaBuscar {

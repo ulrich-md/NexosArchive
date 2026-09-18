@@ -183,4 +183,11 @@ export interface Peticion {
   modo?: Modo;
   pagina?: number;
   por_pagina?: number;
+  /**
+   * Pregunta del turno inmediatamente anterior en la misma conversación, si
+   * lo hay. Habilita el seguimiento del hilo ("¿y en 2010?", "de esos,
+   * cuáles son de mujeres"): nunca se usa para nada más que reformular esta
+   * pregunta antes de clasificarla.
+   */
+  pregunta_anterior?: string | null;
 }

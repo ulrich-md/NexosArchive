@@ -18,6 +18,7 @@ import {
   aniosMencionados,
   contieneLiga,
   decadasMencionadas,
+  detectaSeguimiento,
   escaparParaPrompt,
   normalizar,
   rangoPublicacion,
@@ -203,6 +204,21 @@ Deno.test('fusionRrf ordena por posición, no por puntaje crudo', () => {
   // El 20 aparece en las dos listas: gana aunque nunca sea primero.
   assertEquals(fusion[0].articulo_id, 20);
   assertEquals(fusion.length, 3);
+});
+
+Deno.test('detectaSeguimiento reconoce continuadores de conversación', () => {
+  assert(detectaSeguimiento('¿Y en 2010?'));
+  assert(detectaSeguimiento('De esos, cuáles son de mujeres'));
+  assert(detectaSeguimiento('También muéstrame los de economía'));
+  assert(detectaSeguimiento('Y de Ángeles Mastretta'));
+  assert(detectaSeguimiento('Lo mismo pero de los ochenta'));
+});
+
+Deno.test('detectaSeguimiento no dispara con preguntas nuevas e independientes', () => {
+  assert(!detectaSeguimiento('Todo lo que publicó Ángeles Mastretta en los noventa'));
+  assert(!detectaSeguimiento('Artículos de 1988 sobre fraude electoral'));
+  assert(!detectaSeguimiento('¿Qué se ha escrito en Nexos sobre el 2006?'));
+  assert(!detectaSeguimiento(''));
 });
 
 Deno.test('normalizarPaginacion acota la página y el tamaño', () => {

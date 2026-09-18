@@ -17,6 +17,16 @@ export const LINEA_AYUDA = `Solo responde con lo que existe en el archivo de la 
 
 export const DIAS_RETENCION = 7;
 
+/**
+ * Duración mínima del estado "Pensando" antes de mostrar resultados. Sin
+ * esto, una consulta rápida (catálogo responde en <100ms) reemplaza el
+ * indicador de pensamiento por los resultados casi al instante — se
+ * percibe como que la respuesta "aparece" sin que el archivo se haya
+ * consultado de verdad. Pedido explícito: el pensamiento debe verse
+ * completo ANTES de los artículos, nunca a la par ni después.
+ */
+export const MS_MIN_PENSANDO = 1800;
+
 /** Sección 3, mejora 6. Texto exacto. */
 export const EJEMPLOS: readonly string[] = [
   '¿Qué se ha escrito en Nexos sobre el 2006?',

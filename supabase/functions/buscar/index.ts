@@ -27,7 +27,8 @@ import { registrarConsulta, verificarLimite } from './bitacora.ts';
 import { PREGUNTA_MAX_CARACTERES, TIMEOUT_TOTAL_MS } from './config.ts';
 import { comoErrorBuscar, ErrorBuscar } from './errores.ts';
 import { encabezadosCors, respuestaError, respuestaJson } from './http.ts';
-import { clasificar, clasificarHeuristica, filtrosParaModoExplicito } from './router.ts';
+import { clasificar, clasificarHeuristica, filtrosParaModoExplicito, reformularSeguimiento } from './router.ts';
+import { detectaSeguimiento } from './texto.ts';
 import { carrilCatalogo, normalizarPaginacion } from './carriles/catalogo.ts';
 import { carrilPanorama } from './carriles/panorama.ts';
 import { carrilHibrida } from './carriles/hibrida.ts';
@@ -74,11 +75,19 @@ function validarPeticion(cuerpo: unknown): Peticion {
     modo = c.modo as Modo;
   }
 
+  const preguntaAnteriorCruda = typeof c.pregunta_anterior === 'string' ? c.pregunta_anterior.trim() : '';
+
   return {
     pregunta,
     modo,
     pagina: typeof c.pagina === 'number' ? c.pagina : undefined,
     por_pagina: typeof c.por_pagina === 'number' ? c.por_pagina : undefined,
+    // Se acota al mismo largo que la pregunta: no tiene sentido que el
+    // contexto pese más que la consulta misma.
+    pregunta_anterior:
+      preguntaAnteriorCruda && preguntaAnteriorCruda.length <= PREGUNTA_MAX_CARACTERES
+        ? preguntaAnteriorCruda
+        : null,
   };
 }
 
@@ -124,14 +133,35 @@ async function manejar(
   const sesion = await autenticar(req);
   const ip = ipDeLaPeticion(req);
 
-  // --- Router ---------------------------------------------------------------
-  const tRouter = performance.now();
   let limiteVerificado = false;
   const verificarLimiteUnaVez = async () => {
     if (limiteVerificado) return;
     await verificarLimite(sesion.usuario_id, ip);
     limiteVerificado = true;
   };
+
+  // --- Seguimiento de conversación -------------------------------------------
+  // Solo la pregunta INMEDIATAMENTE anterior: alcanza para "¿y en 2010?" o
+  // "de esos, cuáles son de mujeres" sin que el router cargue con toda la
+  // conversación. `detectaSeguimiento` es la compuerta barata que evita
+  // pagar el viaje al modelo en cada pregunta nueva e independiente.
+  let preguntaEfectiva = peticion.pregunta;
+  if (peticion.pregunta_anterior && detectaSeguimiento(peticion.pregunta)) {
+    await verificarLimiteUnaVez();
+    const seguimiento = await reformularSeguimiento(peticion.pregunta_anterior, peticion.pregunta);
+    if (seguimiento.siguioElHilo) {
+      preguntaEfectiva = seguimiento.pregunta;
+      traza.push({
+        paso: 'router',
+        titulo: 'Siguió el hilo de la conversación',
+        detalle: `Entendió la pregunta como: «${preguntaEfectiva}»`,
+        ms: 0,
+      });
+    }
+  }
+
+  // --- Router ---------------------------------------------------------------
+  const tRouter = performance.now();
 
   // Los tres carriles están abiertos con o sin sesión (CLAUDE.md sección 6):
   // solo la audiencia interna de Nexos conoce esta URL, así que la sesión
@@ -140,12 +170,12 @@ async function manejar(
   const permitirLlm = true;
 
   let clasificacion: Clasificacion | null = peticion.modo
-    ? await filtrosParaModoExplicito(peticion.pregunta, peticion.modo)
-    : await clasificarHeuristica(peticion.pregunta);
+    ? await filtrosParaModoExplicito(preguntaEfectiva, peticion.modo)
+    : await clasificarHeuristica(preguntaEfectiva);
 
   if (!clasificacion) {
     await verificarLimiteUnaVez();
-    clasificacion = await clasificar(peticion.pregunta, null, permitirLlm);
+    clasificacion = await clasificar(preguntaEfectiva, null, permitirLlm);
   }
 
   avisos.push(...clasificacion.avisos);
@@ -175,13 +205,13 @@ async function manejar(
     resultado = await carrilCatalogo(filtros, paginacion, avisos);
   } else if (clasificacion.modo === 'panorama') {
     await verificarLimiteUnaVez();
-    resultado = await carrilPanorama(peticion.pregunta, filtros, avisos);
+    resultado = await carrilPanorama(preguntaEfectiva, filtros, avisos);
   } else {
     // hibrida: fase 2. Con la bandera apagada lanza un error TIPADO y se
     // degrada al carril que sí puede responder — nunca se cae en silencio.
     try {
       await verificarLimiteUnaVez();
-      resultado = await carrilHibrida(peticion.pregunta, filtros, avisos);
+      resultado = await carrilHibrida(preguntaEfectiva, filtros, avisos);
     } catch (e) {
       const err = comoErrorBuscar(e);
       if (err.codigo !== 'FASE2_INACTIVA' && err.codigo !== 'FASE2_INCOMPLETA') throw err;
@@ -226,7 +256,7 @@ async function manejar(
   registrarConsulta({
     usuario: sesion.usuario_id,
     ip,
-    pregunta: peticion.pregunta,
+    pregunta: preguntaEfectiva,
     modo: resultado.modo,
     n_resultados: resultado.fichas.length,
     ms,
@@ -238,7 +268,7 @@ async function manejar(
     modo: resultado.modo,
     modo_solicitado: modoSolicitado,
     degradado,
-    pregunta: peticion.pregunta,
+    pregunta: preguntaEfectiva,
     filtros: aFiltrosAplicados(resultado.filtros),
     sintesis: resultado.sintesis,
     resultados: resultado.fichas,

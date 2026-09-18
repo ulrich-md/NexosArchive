@@ -448,6 +448,45 @@ las pruebas del día, una llamada real a `llamarConHerramienta` saltó sola a
 
 `MODELOS_GEMINI` (`config.ts`) reemplaza a `MODELO_ROUTER`/`MODELO_SINTESIS`/
 `MODELO_RERANK`, que apuntaban los tres al mismo modelo de todos modos.
+
+### Seguimiento de conversación: solo el turno anterior, con compuerta barata (2026-09-18)
+
+Hasta ahora cada pregunta se clasificaba sola, sin memoria: "¿y en 2010?" o
+"de esos, cuáles son de mujeres" no tenían con qué resolverse — el router no
+sabía que existía una pregunta anterior. Pedido explícito: que el chatbot
+"pueda seguir el hilo de la conversación".
+
+Alcance elegido (recomendación tomada, no medida): **solo la pregunta
+INMEDIATAMENTE anterior**, no la conversación completa. Cubre "¿y en 2010?"
+y "de esos, cuáles son de mujeres" sin que cada consulta cargue con todo el
+historial ni pague más latencia de la necesaria.
+
+Cómo funciona, en `supabase/functions/buscar/`:
+
+1. El frontend manda `pregunta_anterior` con la pregunta del turno previo
+   (`App.tsx`: `enviar()`/`reintentar()` la calculan del arreglo `turnos`
+   antes de empujar el turno nuevo).
+2. `texto.ts#detectaSeguimiento()` es una compuerta LOCAL, sin LLM: un patrón
+   de continuadores en español ("y...", "también", "de esos", "lo mismo",
+   pronombres como "esos"/"ellas"). Sin esta compuerta, reformular CADA
+   pregunta de una conversación de 2+ turnos rompería la promesa de <100ms
+   de catálogo (sección 4) aunque la pregunta nueva fuera independiente —
+   que es el caso más común.
+3. Solo si la compuerta dispara, `router.ts#reformularSeguimiento()` llama a
+   Gemini (misma rotación de `MODELOS_GEMINI`) con la pregunta anterior y la
+   nueva, y pide una reescritura independiente + un booleano
+   `depende_del_anterior`. Si el modelo dice que no dependía, o si falla o no
+   hay llave, se seguimiento con la pregunta tal cual llegó — nunca tumba la
+   consulta.
+4. Cuando sí siguió el hilo, la traza gana un paso explícito ("Siguió el hilo
+   de la conversación · Entendió la pregunta como: «...»"): el editor ve
+   exactamente qué se entendió, nunca una reinterpretación silenciosa
+   (coherente con la sección 3, mejora 3 — "un editor no confía en una caja
+   negra").
+
+Una pregunta nueva e independiente (la mayoría) nunca paga esta llamada
+extra: ni la compuerta ni la reformulación tocan el camino de catálogo <100ms
+cuando no hay señal de continuidad.
 ---
 ## 5. Esquema
 ```sql

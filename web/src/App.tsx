@@ -9,6 +9,7 @@ import { PanelReposo } from '@/components/PanelReposo';
 import { Button } from '@/components/ui/button';
 import { ErrorConsulta, MS_AVISO_LENTO, MS_LIMITE, buscar, facetas as pedirFacetas } from '@/lib/api';
 import type { RespuestaFacetas } from '@/lib/contrato';
+import { MS_MIN_PENSANDO } from '@/lib/constantes';
 import {
   borrarConversacionGuardada,
   cargarConversacionGuardada,
@@ -130,7 +131,7 @@ export default function App() {
 
   // --- Consulta ------------------------------------------------------------
   const preguntar = useCallback(
-    async (pregunta: string, idTurno: string) => {
+    async (pregunta: string, idTurno: string, preguntaAnterior: string | null) => {
       const control = new AbortController();
       abortRef.current = control;
 
@@ -142,7 +143,18 @@ export default function App() {
 
       try {
         // Nunca se manda `modo`: el router decide solo (ningún chip lo sugiere).
-        const respuesta = await buscar({ pregunta }, control.signal);
+        // `pregunta_anterior` es solo el turno inmediatamente previo: alcanza
+        // para que el backend resuelva "¿y en 2010?" o "de esos, cuáles son
+        // de mujeres" sin cargar toda la conversación en cada consulta.
+        // Promise.all con un temporizador impone un piso de MS_MIN_PENSANDO:
+        // una consulta de catálogo puede responder en <100ms, y sin este piso
+        // el "Pensando" se reemplazaría por los resultados casi de inmediato.
+        // Un error NO espera este piso — Promise.all rechaza apenas rechaza
+        // cualquiera de las dos, así que una falla se muestra de inmediato.
+        const [respuesta] = await Promise.all([
+          buscar({ pregunta, pregunta_anterior: preguntaAnterior }, control.signal),
+          new Promise((resolve) => window.setTimeout(resolve, MS_MIN_PENSANDO)),
+        ]);
         setTurnos((ts) =>
           ts.map((t) =>
             t.id === idTurno ? { ...t, estado: 'lista', lento: false, respuesta } : t,
@@ -186,18 +198,21 @@ export default function App() {
       setMenuMovil(false);
 
       const id = nuevoId();
+      const preguntaAnterior = turnos.length > 0 ? turnos[turnos.length - 1].pregunta : null;
       setTurnos((ts) => [
         ...ts,
         { id, pregunta, estado: 'cargando', lento: false, respuesta: null, error: null, paginando: false },
       ]);
-      void preguntar(pregunta, id);
+      void preguntar(pregunta, id, preguntaAnterior);
     },
-    [texto, ocupado, preguntar],
+    [texto, ocupado, preguntar, turnos],
   );
 
   const reintentar = useCallback(
     (turno: Turno) => {
       if (ocupado) return;
+      const indice = turnos.findIndex((t) => t.id === turno.id);
+      const preguntaAnterior = indice > 0 ? turnos[indice - 1].pregunta : null;
       setTurnos((ts) =>
         ts.map((t) =>
           t.id === turno.id
@@ -205,9 +220,9 @@ export default function App() {
             : t,
         ),
       );
-      void preguntar(turno.pregunta, turno.id);
+      void preguntar(turno.pregunta, turno.id, preguntaAnterior);
     },
-    [ocupado, preguntar],
+    [ocupado, preguntar, turnos],
   );
 
   // Cambiar de página no reabre todo el turno como "cargando": solo la lista

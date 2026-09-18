@@ -46,7 +46,13 @@ function ListaArticulos({
   const porPagina = respuesta.por_pagina || respuesta.articulos.length;
   const totalPaginas = Math.max(1, Math.ceil(respuesta.total / porPagina));
   const paginaActual = Math.min(Math.max(1, respuesta.pagina || 1), totalPaginas);
-  const puedePaginar = totalPaginas > 1;
+  // Solo catálogo pagina de verdad (un WHERE con `pagina`/`por_pagina` reales
+  // sobre la base). Panorama siempre reporta `pagina: 1` y arma su lista de
+  // artículos citados con una llamada nueva a Gemini cada vez —no determinista,
+  // sin relación entre lo que se ve en cada clic—, así que "Siguiente" no
+  // avanzaba nada: solo volvía a gastar cuota y mostraba otro grupo al azar.
+  // Mostrar el paginador ahí era mostrar un control que no podía funcionar.
+  const puedePaginar = respuesta.modo === 'catalogo' && totalPaginas > 1;
 
   return (
     <Collapsible open={abierta} onOpenChange={setAbierta}>

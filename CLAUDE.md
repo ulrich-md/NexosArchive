@@ -527,6 +527,40 @@ autor. `aproximar()` se beneficia gratis del mismo arreglo, porque recibe los
 filtros ya sin el `temas` fantasma.
 
 Pruebas de regresión en `pruebas.test.ts` (`sinTemasFantasma`, 3 casos).
+
+### El paginador de artículos se mostraba en panorama, donde no puede funcionar (2026-09-18)
+
+Reporte real: "no funciona la paginación de los artículos, se buguea". Medido
+contra producción con la misma pregunta pidiendo `pagina: 1` y luego
+`pagina: 2`:
+
+```
+pagina 1 → modo: panorama · pagina: 1 · por_pagina: 74 · total: 92
+pagina 2 → modo: panorama · pagina: 1 · por_pagina: 40 · total: 92
+```
+
+`carrilPanorama` (`carriles/panorama.ts`) **siempre** devuelve `pagina: 1`:
+no tiene ni puede tener un concepto real de "página 2", porque no es un
+`WHERE` con `LIMIT/OFFSET` como catálogo — es "trae hasta `PANORAMA_MAX_FILAS`
+coincidencias, agrúpalas con una llamada a Gemini, cita las que el modelo
+eligió". Pedirle `pagina: 2` no cambia nada de esa lógica: **vuelve a correr
+toda la síntesis desde cero** (una llamada nueva a Gemini, no determinista) y
+regresa otro grupo de artículos citados — de ahí que `por_pagina` cambiara de
+74 a 40 sin que `pagina` se moviera del 1. El editor veía el número de página
+congelado en 1 mientras la lista de artículos cambiaba a algo sin relación
+con lo anterior: eso es lo que se leía como "se buguea", y de paso cada clic
+gastaba una llamada más a la cuota de Gemini para nada.
+
+`ListaArticulos` (`web/src/components/BloqueRespuesta.tsx`) decidía si
+mostrar el paginador solo mirando si `total > por_pagina` — cierto en
+panorama casi siempre, porque `total` es el conteo real de coincidencias en
+SQL y `por_pagina` es cuántas citó el modelo, casi nunca el mismo número.
+Arreglo: `puedePaginar` ahora exige además `respuesta.modo === 'catalogo'` —
+el único carril con `LIMIT/OFFSET` real (incluye hibrida degradada a
+catálogo, que hereda esa paginación real). Catálogo directo (`Mastretta`,
+`Albrecht`) se verificó en vivo, página por página, antes y después: sigue
+avanzando bien. Panorama simplemente ya no ofrece un control que nunca pudo
+cumplir lo que prometía.
 ---
 ## 5. Esquema
 ```sql

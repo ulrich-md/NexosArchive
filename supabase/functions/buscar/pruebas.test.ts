@@ -29,7 +29,8 @@ import { armarFicha, idsValidos, SIN_AUTOR } from './fichas.ts';
 import { validarClasificacion, validarRerank, validarSintesis } from './validacion.ts';
 import { literalArreglo } from './carriles/comun.ts';
 import { fusionRrf } from './carriles/hibrida.ts';
-import { normalizarPaginacion } from './carriles/catalogo.ts';
+import { normalizarPaginacion, sinTemasFantasma } from './carriles/catalogo.ts';
+import { filtrosVacios } from './carriles/comun.ts';
 import { aEsquemaGemini } from './gemini.ts';
 import { decidirHeuristica, emparejarAutores } from './router.ts';
 import { temaResidual as residualDe } from './texto.ts';
@@ -224,6 +225,28 @@ Deno.test('detectaSeguimiento no dispara con preguntas nuevas e independientes',
 Deno.test('normalizarPaginacion acota la página y el tamaño', () => {
   assertEquals(normalizarPaginacion({ pagina: 0, por_pagina: 0 }).pagina, 1);
   assert(normalizarPaginacion({ por_pagina: 10_000 }).por_pagina <= 100);
+});
+
+Deno.test('sinTemasFantasma dobla temas dentro de texto en vez de exigir ambos', () => {
+  // Caso real: "que ha escrito albrecht" — el router no encontró autor (solo
+  // una pieza del nombre) y llenó texto Y temas con la misma palabra. Exigir
+  // ambos (temas ov + texto tsvector) devolvía 0 aunque el autor existe.
+  const filtros = { ...filtrosVacios(), texto: 'albrecht', temas: ['albrecht'] };
+  const limpio = sinTemasFantasma(filtros);
+  assertEquals(limpio.temas, []);
+  assertEquals(limpio.texto, 'albrecht');
+});
+
+Deno.test('sinTemasFantasma junta texto y temas distintos sin perder ninguno', () => {
+  const filtros = { ...filtrosVacios(), texto: 'fraude', temas: ['elecciones', 'corrupcion'] };
+  const limpio = sinTemasFantasma(filtros);
+  assertEquals(limpio.temas, []);
+  assertEquals(limpio.texto, 'fraude elecciones corrupcion');
+});
+
+Deno.test('sinTemasFantasma no toca filtros sin temas', () => {
+  const filtros = { ...filtrosVacios(), texto: 'fraude' };
+  assertEquals(sinTemasFantasma(filtros), filtros);
 });
 
 // --- Router (la parte que se puede probar sin base de datos) ----------------

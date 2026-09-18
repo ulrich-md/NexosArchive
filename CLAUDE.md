@@ -487,6 +487,46 @@ Cómo funciona, en `supabase/functions/buscar/`:
 Una pregunta nueva e independiente (la mayoría) nunca paga esta llamada
 extra: ni la compuerta ni la reformulación tocan el camino de catálogo <100ms
 cuando no hay señal de continuidad.
+
+### `temas` no es texto libre, y catálogo lo trataba como si lo fuera (2026-09-18)
+
+Reporte real: "¿Qué ha escrito Albrecht?" devolvía "no encontré coincidencias",
+aunque **Albrecht Mohrhardt Doger existe en el archivo con 8 artículos** (con
+solo "albrecht" el router no arma el autor — la regla de `emparejarAutores`
+exige dos piezas del nombre, sección 4, para no decidir con una sola palabra
+ambigua). "Todo lo que publicó Albrecht Mohrhardt Doger" (nombre completo) sí
+los encontraba los 8; solo fallaba la forma corta.
+
+Causa real, no supuesta: `router.ts` llena `temas` con las MISMAS palabras que
+ya puso en `texto` en tres sitios (`clasificarRespaldo`, `filtrosParaModoExplicito`,
+y `clasificarConLlm` cuando arma `texto` a partir de `crudo.temas`) — nunca
+conoce el vocabulario real de enriquecimiento, así que solo puede repetir lo
+que ya extrajo de la pregunta. `buscarArticulos` (`carriles/comun.ts`) exige
+`temas` (`ov` contra el arreglo de etiquetas que puso el enriquecimiento) Y
+`texto` (`tsvector`) a la vez. Para "albrecht" eso pedía, a la vez: que
+"albrecht" apareciera en el texto completo (sí — su nombre vive en el
+`tsvector`) Y que "albrecht" fuera una etiqueta de tema del artículo (nunca lo
+es: los temas son clasificaciones como "corrupción", no nombres de persona).
+0 coincidencias, aunque el archivo sí tenía los 8 artículos.
+
+Panorama no lo sufre: su `recolectar()` (`carriles/panorama.ts`) ya cae solo
+al Pase B (busca en títulos/autores, sin tratar `temas` como filtro duro) si
+el Pase A con enriquecimiento no encuentra nada. **Catálogo no tenía ese
+pase de respaldo** y además su `aproximar()` (`carriles/comun.ts`) relajaba
+`texto` y `temas` juntos como primer intento, perdiendo la palabra de
+búsqueda real de una vez — por eso los "aproximados" que se veían eran los 5
+artículos más recientes del archivo, sin ninguna relación con "albrecht".
+
+Arreglo, en `carriles/catalogo.ts`: `sinTemasFantasma()` corre antes que
+cualquier otra cosa en `carrilCatalogo` — dobla `temas` dentro de `texto`
+(deduplicando palabras) y deja `temas` vacío, porque catálogo **nunca** tiene
+una fuente real de `temas` (la UI no tiene faceta de temas, solo
+Autores/Secciones/Décadas — sección 3). Con eso, `buscarArticulos` vuelve a
+depender solo del `tsvector`, que sí encuentra "albrecht" en el nombre del
+autor. `aproximar()` se beneficia gratis del mismo arreglo, porque recibe los
+filtros ya sin el `temas` fantasma.
+
+Pruebas de regresión en `pruebas.test.ts` (`sinTemasFantasma`, 3 casos).
 ---
 ## 5. Esquema
 ```sql

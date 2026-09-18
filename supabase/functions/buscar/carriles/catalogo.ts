@@ -76,11 +76,47 @@ async function resumenCalculado(
   };
 }
 
+/**
+ * `temas` es un filtro de ENRIQUECIMIENTO: el arreglo de etiquetas que el
+ * modelo le puso al artículo al catalogarlo (`scripts/enriquecer.ts`), no
+ * palabras sueltas de la pregunta. El router nunca conoce ese vocabulario —
+ * cuando no encuentra un autor real o un patrón claro, llena `temas` con las
+ * MISMAS palabras que ya puso en `texto` (ver `router.ts`, los tres casos que
+ * derivan ambos de `residual`). Catálogo no tiene, además, el pase de
+ * respaldo que sí tiene panorama (`recolectar()` en `panorama.ts`): aquí
+ * exigir a la vez "la palabra está en `texto`" Y "la palabra es una etiqueta
+ * de tema real" devolvía 0 coincidencias en búsquedas que sí existen por
+ * texto completo — medido con "¿qué ha escrito albrecht?": hay 8 artículos
+ * reales de Albrecht Mohrhardt Doger, encontrables por `texto` (su nombre
+ * vive en el `tsvector`), pero salían 0 porque además exigía `temas ov
+ * {albrecht}`, y "albrecht" nunca fue una etiqueta de enriquecimiento de
+ * nadie. La UI tampoco tiene una faceta de "temas" (solo Autores/Secciones/
+ * Décadas), así que aquí `temas` nunca es una elección real del editor: se
+ * dobla dentro de `texto` y se descarta como filtro aparte.
+ */
+export function sinTemasFantasma(filtros: FiltrosConsulta): FiltrosConsulta {
+  if (filtros.temas.length === 0) return filtros;
+  // `texto` y `temas` suelen traer las mismas palabras (ambos salen de
+  // `residual` en router.ts): sin deduplicar, la traza mostraría algo como
+  // «albrecht albrecht», que se lee como un error aunque no cambie el
+  // resultado de la búsqueda de texto completo.
+  const palabras = [filtros.texto ?? '', ...filtros.temas]
+    .flatMap((p) => p.trim().split(/\s+/))
+    .filter((p) => p !== '');
+  const unicas = [...new Set(palabras)];
+  return {
+    ...filtros,
+    temas: [],
+    texto: unicas.length > 0 ? unicas.join(' ') : null,
+  };
+}
+
 export async function carrilCatalogo(
-  filtros: FiltrosConsulta,
+  filtrosCrudos: FiltrosConsulta,
   op: OpcionesCatalogo,
   avisosPrevios: Aviso[] = [],
 ): Promise<ResultadoCarril> {
+  const filtros = sinTemasFantasma(filtrosCrudos);
   const t0 = performance.now();
   const desde = (op.pagina - 1) * op.por_pagina;
 

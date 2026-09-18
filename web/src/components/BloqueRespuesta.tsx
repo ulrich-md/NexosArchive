@@ -50,12 +50,12 @@ function ListaArticulos({
 
   return (
     <Collapsible open={abierta} onOpenChange={setAbierta}>
-      <div className="max-w-4xl overflow-hidden rounded-lg border border-border bg-surface">
+      <div className="max-w-4xl overflow-hidden rounded-lg border border-foreground/15 bg-surface">
         <CollapsibleTrigger
           aria-label={abierta ? 'Ocultar artículos' : 'Ver artículos del archivo'}
-          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60"
+          className="flex w-full items-center justify-between gap-3 bg-muted px-4 py-3 text-left transition-colors hover:bg-muted/80"
         >
-          <span className="mono-meta text-foreground">Artículos del archivo</span>
+          <span className="mono-meta font-medium text-foreground">Artículos del archivo</span>
           <span className="flex items-center gap-2">
             <span className="mono-meta tabular text-muted-foreground">
               {conMiles(respuesta.total)} en total
@@ -72,7 +72,7 @@ function ListaArticulos({
 
         <CollapsibleContent className="overflow-hidden motion-safe:data-[state=closed]:animar-plegar motion-safe:data-[state=open]:animar-desplegar">
           <div
-            className={`border-t border-border px-4 py-1 transition-opacity ${paginando ? 'opacity-50' : ''}`}
+            className={`border-t border-foreground/15 px-4 py-1 transition-opacity ${paginando ? 'opacity-50' : ''}`}
             aria-busy={paginando}
           >
             {respuesta.articulos.map((a) => (
@@ -81,7 +81,7 @@ function ListaArticulos({
           </div>
 
           {puedePaginar ? (
-            <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2">
+            <div className="flex items-center justify-between gap-3 border-t border-foreground/15 px-4 py-2">
               <Button
                 variant="contorno"
                 size="sm"

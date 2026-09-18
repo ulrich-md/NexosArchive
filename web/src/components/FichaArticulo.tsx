@@ -16,7 +16,7 @@ export function FichaArticulo({ articulo }: { articulo: Articulo }) {
   const conAutor = articulo.autores.length > 0;
 
   return (
-    <article className="group -mx-3 border-b border-border px-3 py-3 transition-colors last:border-b-0 hover:bg-muted">
+    <article className="group -mx-3 border-b border-foreground/15 px-3 py-3 transition-colors last:border-b-0 hover:bg-muted">
       <a
         href={articulo.url}
         target="_blank"

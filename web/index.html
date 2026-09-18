@@ -18,14 +18,14 @@
     />
     <script>
       // Aplica el tema antes del primer pintado para que no haya destello
-      // blanco al recargar en modo oscuro.
+      // blanco al recargar en modo oscuro. El claro es el predeterminado:
+      // solo se activa el oscuro si la persona lo eligió antes con el
+      // toggle (guardado en localStorage) — nunca por seguir el sistema.
       (function () {
         try {
-          var guardado = localStorage.getItem('nexos-tema');
-          var oscuro =
-            guardado === 'oscuro' ||
-            (guardado === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (oscuro) document.documentElement.classList.add('dark');
+          if (localStorage.getItem('nexos-tema') === 'oscuro') {
+            document.documentElement.classList.add('dark');
+          }
         } catch (e) {
           /* almacenamiento bloqueado: se queda en claro */
         }

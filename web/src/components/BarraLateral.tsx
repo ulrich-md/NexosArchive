@@ -248,7 +248,7 @@ export function BarraLateral({
 
       {/* Las conversaciones se guardan solas en este navegador (sin sesión);
           Google queda como una opción menor, no como la puerta de entrada. */}
-      <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border px-3 py-3">
+      <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
         <a
           href="https://www.nexos.com.mx"
           target="_blank"

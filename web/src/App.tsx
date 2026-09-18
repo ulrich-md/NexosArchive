@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { ArrowDown, Menu, X } from 'lucide-react';
 import { AlternarTema } from '@/components/AlternarTema';
 import { BarraLateral } from '@/components/BarraLateral';
 import { BloqueRespuesta, type Turno } from '@/components/BloqueRespuesta';
@@ -42,6 +42,7 @@ export default function App() {
 
   const abortRef = useRef<AbortController | null>(null);
   const ultimoTurnoRef = useRef<HTMLDivElement>(null);
+  const [mostrarBajar, setMostrarBajar] = useState(false);
 
   const ocupado = turnos.some((t) => t.estado === 'cargando');
 
@@ -83,6 +84,43 @@ export default function App() {
   useEffect(() => {
     ultimoTurnoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [turnos.length]);
+
+  // Botón flotante "ir hasta abajo": una conversación larga en pantallas
+  // chicas se lee de a poco, y quien sube a releer un turno anterior necesita
+  // un camino directo de vuelta al final sin arrastrar el dedo.
+  //
+  // El scroll real ocurre en la VENTANA, no en el contenedor de turnos: el
+  // layout crece con `min-h-[100dvh]` en vez de una altura fija con
+  // `overflow` propio, así que el `overflow-y-auto` de ese contenedor nunca
+  // llega a recortar nada (medido: su scrollHeight siempre iguala su
+  // clientHeight). Un botón que escuchara el scroll de ese div nunca se
+  // mostraría.
+  useEffect(() => {
+    const DISTANCIA_UMBRAL = 160;
+    function evaluar() {
+      const doc = document.documentElement;
+      const distanciaAlFondo = doc.scrollHeight - window.scrollY - window.innerHeight;
+      setMostrarBajar(distanciaAlFondo > DISTANCIA_UMBRAL);
+    }
+
+    evaluar();
+    window.addEventListener('scroll', evaluar, { passive: true });
+    window.addEventListener('resize', evaluar);
+    // El contenido crece sin que haya scroll (llega la respuesta, se pagina):
+    // hay que reevaluar la distancia al fondo también entonces.
+    const observador = new ResizeObserver(evaluar);
+    observador.observe(document.body);
+
+    return () => {
+      window.removeEventListener('scroll', evaluar);
+      window.removeEventListener('resize', evaluar);
+      observador.disconnect();
+    };
+  }, [turnos]);
+
+  const bajarAlFondo = useCallback(() => {
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  }, []);
 
   // Conversación por sesión de navegador: sin iniciar sesión, se guarda sola
   // en este navegador y se descarta a los DIAS_RETENCION días.
@@ -315,7 +353,18 @@ export default function App() {
           />
         )}
 
-        <div className="sticky bottom-0 z-30 w-full border-t border-border bg-background px-3 py-3 md:relative md:mx-auto md:w-full md:max-w-3xl md:border-0 md:bg-transparent md:px-6 md:pb-16 md:pt-0">
+        {enConversacion && mostrarBajar ? (
+          <button
+            type="button"
+            onClick={bajarAlFondo}
+            aria-label="Ir hasta abajo de la conversación"
+            className="fixed bottom-[calc(7rem+env(safe-area-inset-bottom))] right-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-foreground shadow-md transition-colors hover:border-primary hover:text-primary md:bottom-32 md:right-8"
+          >
+            <ArrowDown className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          </button>
+        ) : null}
+
+        <div className="sticky bottom-0 z-30 w-full border-t border-border bg-background px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:relative md:mx-auto md:w-full md:max-w-3xl md:border-0 md:bg-transparent md:px-6 md:pb-16 md:pt-0">
           <CajaConsulta
             valor={texto}
             onValor={setTexto}

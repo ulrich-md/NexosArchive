@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Frontend del Archivo Nexos. Replica el dise\u00f1o de archivonexos.online (CLAUDE.md secci\u00f3n 3).",
+  "description": "Frontend del Archivo Nexos. Replica el diseño de archivonexos.online (CLAUDE.md sección 3).",
   "scripts": {
     "dev": "vite",
     "build": "npm run verificar:seguridad && tsc -b && vite build",
@@ -14,6 +14,7 @@
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.20",
     "@supabase/supabase-js": "^2.116.0",
+    "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.42.0",

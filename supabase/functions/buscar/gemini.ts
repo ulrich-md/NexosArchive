@@ -230,7 +230,7 @@ export async function llamarConHerramienta<T>(op: OpcionesLlamada<T>): Promise<T
   if (candidatos.length === 0) {
     throw new ErrorBuscar('LLM_LIMITE', 'El servicio de respuestas está saturado ahora mismo.', {
       detalle: `Los ${op.modelos.length} modelos configurados agotaron su cuota diaria.`,
-      sugerencia: 'El modo Catálogo sigue disponible.',
+      sugerencia: 'Las búsquedas por autor, año o sección siguen funcionando.',
     });
   }
 
@@ -282,8 +282,8 @@ async function traducirErrorGemini(res: Response, modelo: string): Promise<Error
     return new ErrorBuscar('LLM_LIMITE', 'El servicio de respuestas está saturado ahora mismo.', {
       detalle: `${modelo}: ${mensaje}`,
       sugerencia: porDia
-        ? 'Se agotó la cuota diaria de Gemini. Activa facturación en Google Cloud; el modo Catálogo sigue disponible.'
-        : 'Espera un minuto y reintenta; el modo Catálogo sigue disponible.',
+        ? 'Se agotó la cuota diaria del modelo. Las búsquedas por autor, año o sección siguen funcionando.'
+        : 'Espera un minuto y reintenta; las búsquedas por autor, año o sección siguen funcionando.',
       reintentar_en_s: porDia ? undefined : 60,
       causa: { porDia },
     });

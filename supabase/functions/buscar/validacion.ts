@@ -5,7 +5,7 @@
 import { ANIO_MAX, ANIO_MIN } from './config.ts';
 import { ErrorBuscar } from './errores.ts';
 import { contieneLiga, sanearParrafos, sanearTextoModelo } from './texto.ts';
-import type { Modo } from './tipos.ts';
+import type { FiltrosAplicados, Modo } from './tipos.ts';
 
 const MODOS: Modo[] = ['panorama', 'hibrida', 'catalogo'];
 
@@ -259,4 +259,41 @@ export function validarRespuesta(
   }
 
   return { texto, articulo_ids: ids };
+}
+
+// --- Eco de filtros para paginar --------------------------------------------
+
+/**
+ * Los filtros que la interfaz devuelve para pedir otra página. Vienen del
+ * navegador, así que se validan como cualquier entrada: tipos, largos y
+ * rangos. Son seguros en sí (solo alimentan un WHERE parametrizado con
+ * service role), pero nada que no tenga la forma exacta pasa.
+ */
+export function validarFiltrosEco(crudo: unknown): FiltrosAplicados | null {
+  if (!esObjeto(crudo)) return null;
+  const texto = (v: unknown, max: number) =>
+    typeof v === 'string' && v.trim() !== '' && v.length <= max ? v.trim() : null;
+  const listaTexto = (v: unknown, maxItems: number, maxLargo: number) =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === 'string' && x.trim() !== '' && x.length <= maxLargo)
+        .slice(0, maxItems)
+      : [];
+
+  let aniosPub: FiltrosAplicados['anios_pub'] = null;
+  if (esObjeto(crudo.anios_pub)) {
+    const d = Number(crudo.anios_pub.desde);
+    const h = Number(crudo.anios_pub.hasta);
+    if (Number.isInteger(d) && Number.isInteger(h) && d >= ANIO_MIN && h <= ANIO_MAX && d <= h) {
+      aniosPub = { desde: d, hasta: h };
+    }
+  }
+
+  return {
+    autores: listaTexto(crudo.autores, 5, 160),
+    anios_pub: aniosPub,
+    anios_referidos: anios(crudo.anios_referidos, 120),
+    temas: listaTexto(crudo.temas, 10, 80),
+    texto: texto(crudo.texto, 300),
+    seccion: texto(crudo.seccion, 160),
+  };
 }

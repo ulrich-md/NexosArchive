@@ -87,9 +87,13 @@ $$;
 --   2. Texto: `ts` contra un OR de las palabras de `p_texto`. OR y no AND: el
 --      ranking ya premia a quien trae más palabras, y un AND devolvía 0.
 --
--- Un artículo que solo llega por el vector tiene que estar a menos de
--- `p_distancia_max`: el vector SIEMPRE devuelve vecinos, aunque ninguno trate
--- el tema, y esos son justo los "artículos sin relación" de las quejas.
+-- Con vector, la distancia filtra a TODOS los candidatos, no solo a los que
+-- llegaron por él: el vector siempre devuelve vecinos aunque ninguno trate el
+-- tema, y el texto tiene su propio ruido. Medido en producción (2026-10-13):
+-- el stemmer de español reduce "comida" a 'com', la misma raíz que "cómo", así
+-- que "Mastretta + comida" daba 566 coincidencias por palabra, toda su obra.
+-- Lo que trae las palabras tiene un margen 30% más holgado; lo que aún no
+-- tiene vector (carga pendiente) pasa por texto, sin filtro.
 create or replace function buscar_articulos_hibrido(
   p_texto           text     default null,
   p_embedding       extensions.halfvec default null,
@@ -169,16 +173,18 @@ begin
       ) x
   ),
   txt as (
-    select y.id,
+    select y.id, y.d,
            row_number() over (order by y.rk desc, y.id desc)::integer as r
       from (
-        (select b.id, ts_rank_cd(b.ts, v_q) as rk
+        (select b.id, ts_rank_cd(b.ts, v_q) as rk,
+                case when p_embedding is not null then (b.embedding <=> p_embedding)::real end as d
            from base b
           where v_filtrado and v_q is not null and b.ts @@ v_q
           order by ts_rank_cd(b.ts, v_q) desc
           limit v_k)
         union all
-        (select a.id, ts_rank_cd(a.ts, v_q) as rk
+        (select a.id, ts_rank_cd(a.ts, v_q) as rk,
+                case when p_embedding is not null then (a.embedding <=> p_embedding)::real end as d
            from articulos a
           where not v_filtrado and v_q is not null and a.ts @@ v_q
           order by ts_rank_cd(a.ts, v_q) desc
@@ -190,14 +196,15 @@ begin
            coalesce(1.0 / (60 + v.r), 0) + coalesce(1.0 / (60 + t.r), 0) as puntaje,
            v.r as rango_vector,
            t.r as rango_texto,
-           v.d as distancia
+           coalesce(v.d, t.d) as distancia
       from vec v
       full outer join txt t on t.id = v.id
   )
   select f.id, f.puntaje::double precision, f.rango_vector, f.rango_texto, f.distancia
     from fusion f
-   -- Lo que llega solo por el vector tiene que estar cerca de verdad.
-   where f.rango_texto is not null or f.distancia <= p_distancia_max
+   where f.distancia is null  -- sin vector de la pregunta, o artículo aún sin vector
+      or f.distancia <= case when f.rango_texto is not null then p_distancia_max * 1.3
+                             else p_distancia_max end
    order by f.puntaje desc, f.id desc
    limit p_limite;
 end;

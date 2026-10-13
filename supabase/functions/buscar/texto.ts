@@ -39,6 +39,10 @@ const VACIAS = new Set([
   'acerca', 'respecto', 'cosas', 'algo', 'hay', 'cual', 'cuales', 'como',
   'donde', 'cuando', 'sido', 'fue', 'era', 'tiene', 'tienen', 'mas', 'muy',
   'tema', 'temas', 'esta', 'este', 'estos', 'estas', 'puedes', 'podrias',
+  // "¿Cuántos artículos ha escrito Mastretta?" es un conteo de su obra (el
+  // resumen del catálogo ya trae la cifra), no una búsqueda de «cuántos».
+  'cuantos', 'cuantas', 'numero', 'cantidad', 'total', 'escritos', 'obra',
+  'obras', 'columnas', 'colaboraciones', 'publicaciones',
 ]);
 
 export function esVacia(t: string): boolean {
@@ -155,8 +159,20 @@ export function sanearTextoModelo(s: unknown, maxLargo = 1_200): string {
  * negativo (no detectar un seguimiento real) no es una regresión: hoy ninguna
  * pregunta usa contexto previo, así que como mucho se queda igual.
  */
-const PATRON_SEGUIMIENTO =
-  /^(y\s|tambien\b|ademas\b|de (esos|esas|ese|esa|eso)\b|sobre (eso|esos|esas)\b|lo mismo\b|igual\b|ahora\s|mas de (eso|esos|esas)\b|otros\s|otras\s)|\b(esos|esas|ellos|ellas|aquello)\b/;
+const PATRON_SEGUIMIENTO = new RegExp(
+  [
+    // Arranques que solo tienen sentido continuando algo.
+    '^(y|e|pero|entonces|bueno|tambien|ademas|ahora|igual|otros|otras)\\b',
+    '^(de|sobre) (esos|esas|ese|esa|eso|estos|estas|ello)\\b',
+    '^(lo mismo|mas de|mas sobre|solo (los|las|el|la)|nada mas (los|las))\\b',
+    // Pedir más de lo que ya se respondió.
+    '^(profundiza|amplia|resume|resumeme|explica|explicame|cuentame mas|dime mas|dame mas)\\b',
+    '\\b(cual|cuales) de (ellos|ellas|esos|esas|estos|estas)\\b',
+    '\\b(el|la) (primero|primera|segundo|segunda|tercero|tercera|ultimo|ultima)\\b',
+    // Pronombres que apuntan a la respuesta anterior.
+    '\\b(esos|esas|ellos|ellas|ella|aquello|aquellos|dichos)\\b',
+  ].join('|'),
+);
 
 export function detectaSeguimiento(pregunta: string): boolean {
   const texto = normalizar(pregunta);
@@ -196,4 +212,62 @@ export function contieneLiga(s: string): boolean {
  */
 export function escaparParaPrompt(s: string): string {
   return s.replace(/[<>]/g, (c) => (c === '<' ? '‹' : '›'));
+}
+
+// --- Charla: lo que no es una búsqueda --------------------------------------
+//
+// "Hola" se buscaba como tema y encontraba artículos con "hola" en el título;
+// "¿qué puedes hacer?" devolvía artículos aproximados. Un saludo, un gracias
+// o una pregunta sobre el buscador se contestan como tal, sin tocar el archivo
+// ni gastar el modelo.
+
+export type Charla = 'saludo' | 'gracias' | 'ayuda';
+
+const CHARLA: Array<{ tipo: Charla; patron: RegExp }> = [
+  {
+    tipo: 'saludo',
+    patron:
+      /^(hola|holi|hey|saludos|buenas|buen dia|buenos dias|buenas tardes|buenas noches|que tal|que onda)( (que tal|como estas|como vas|como te va|a todos))*$/,
+  },
+  {
+    tipo: 'gracias',
+    patron:
+      /^((muchas|mil|muchisimas) )?gracias( (por todo|por la ayuda|eh|de nuevo))?$|^(perfecto|excelente|genial|ok|okay|vale|listo|muy bien|de acuerdo|entendido|super|sale|va|chido|padre)( gracias)?$/,
+  },
+  {
+    tipo: 'ayuda',
+    patron: new RegExp(
+      '^(ayuda|help|instrucciones|' +
+        'que (puedes|sabes) hacer|que haces|que eres|quien eres|que es esto|para que sirves|' +
+        'como (funciona|funcionas|te uso|se usa|busco|pregunto|te pregunto)|' +
+        'que (puedo|se puede) (preguntar|preguntarte|buscar|hacer)|que hay en el archivo|' +
+        'cuantos (articulos|textos) (hay|tiene|tienes|tiene el archivo)( en el archivo)?)$',
+    ),
+  },
+];
+
+export function detectarCharla(pregunta: string): Charla | null {
+  const t = normalizar(pregunta);
+  if (t === '') return 'saludo';
+  for (const c of CHARLA) if (c.patron.test(t)) return c.tipo;
+  return null;
+}
+
+/**
+ * Quita la cortesía del principio ("Hola, ¿me puedes decir qué escribió…"):
+ * es natural escribirla y no es parte de lo que se busca. Sin esto, «hola» y
+ * «decir» entraban como palabras del tema.
+ */
+export function quitarCortesia(pregunta: string): string {
+  const CORTESIA =
+    /^[\s¿¡,.;:!?]*(hola|holi|hey|buen[oa]s(\s+(d[ií]as|tardes|noches))?|buen\s+d[ií]a|oye|oiga|disculpa|disculpe|perd[oó]n|por\s+favor|gracias|qu[eé]\s+tal|me\s+(puedes|podr[ií]as|puede|podr[ií]a)\s+(decir|mostrar|dar|buscar|ense[nñ]ar|ayudar\s+a\s+encontrar)|(quisiera|quiero|necesito)\s+saber|ay[uú]dame\s+a\s+(encontrar|buscar))\b[\s,;:!.?]*/i;
+  let actual = pregunta;
+  for (let i = 0; i < 4; i++) {
+    const siguiente = actual.replace(CORTESIA, '');
+    if (siguiente === actual) break;
+    actual = siguiente;
+  }
+  actual = actual.trim();
+  // Si solo había cortesía, se conserva tal cual: eso lo resuelve la charla.
+  return actual === '' ? pregunta.trim() : actual;
 }

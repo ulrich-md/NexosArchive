@@ -151,7 +151,13 @@ export function BloqueRespuesta({
         </div>
       ) : null}
 
-      {turno.estado === 'lista' && r ? (
+      {turno.estado === 'lista' && r && r.modo === 'conversacion' ? (
+        // Un saludo o un "¿qué puedes hacer?": se contesta sin traza, sin
+        // lista de artículos y sin liga a una búsqueda que no hubo.
+        <div className="mt-6 md:mt-8">
+          <TextoRespuesta texto={r.respuesta ?? ''} articulos={[]} />
+        </div>
+      ) : turno.estado === 'lista' && r ? (
         r.archivo_vacio ? (
           <div className="mt-6">
             <ArchivoVacio />

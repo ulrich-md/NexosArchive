@@ -21,6 +21,11 @@ const CONSULTAS: { pregunta: string; modo?: string }[] = [
   { pregunta: 'Aguilar Camín' },
   // La queja que originó la búsqueda por significado (2026-10-13).
   { pregunta: 'Que ha escrito angeles mastretta sobre comida' },
+  // Interacción natural (2026-10-13): charla sin búsqueda, cortesía que no
+  // contamina el tema, y un apellido solo.
+  { pregunta: 'Hola' },
+  { pregunta: '¿Qué puedes hacer?' },
+  { pregunta: 'Hola, ¿me puedes decir qué escribió Monsiváis sobre el cine?' },
 ];
 
 for (const c of CONSULTAS) {

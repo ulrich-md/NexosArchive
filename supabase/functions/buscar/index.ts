@@ -27,7 +27,9 @@ import { PREGUNTA_MAX_CARACTERES, TIMEOUT_TOTAL_MS } from './config.ts';
 import { comoErrorBuscar, ErrorBuscar } from './errores.ts';
 import { encabezadosCors, respuestaError, respuestaJson } from './http.ts';
 import { clasificar, clasificarHeuristica, filtrosParaModoExplicito, reformularSeguimiento } from './router.ts';
-import { detectaSeguimiento } from './texto.ts';
+import { detectaSeguimiento, detectarCharla, quitarCortesia } from './texto.ts';
+import { responderCharla } from './charla.ts';
+import { validarFiltrosEco } from './validacion.ts';
 import { carrilCatalogo, normalizarPaginacion } from './carriles/catalogo.ts';
 import { carrilPanorama } from './carriles/panorama.ts';
 import { carrilHibrida } from './carriles/hibrida.ts';
@@ -37,6 +39,7 @@ import type { Clasificacion } from './router.ts';
 import {
   VERSION_CONTRATO,
   type Aviso,
+  type FiltrosAplicados,
   type Modo,
   type PasoTraza,
   type Peticion,
@@ -88,7 +91,30 @@ function validarPeticion(cuerpo: unknown): Peticion {
       preguntaAnteriorCruda && preguntaAnteriorCruda.length <= PREGUNTA_MAX_CARACTERES
         ? preguntaAnteriorCruda
         : null,
+    filtros: validarFiltrosEco(c.filtros),
   };
+}
+
+function deFiltrosAplicados(f: FiltrosAplicados): FiltrosConsulta {
+  return {
+    autores: f.autores,
+    rango_pub: f.anios_pub,
+    anios_referidos: f.anios_referidos,
+    temas: f.temas,
+    texto: f.texto,
+    seccion: f.seccion,
+  };
+}
+
+/** Cómo se entendió la pregunta, dicho para el editor y no con jerga interna. */
+function comoSeEntendio(c: Clasificacion): string {
+  const via = {
+    explicito: '',
+    heuristica: ' (sin usar el modelo)',
+    llm: ' (con ayuda del modelo)',
+    respaldo: ' (por reglas: el modelo no respondió)',
+  }[c.origen];
+  return `${c.razon}${via}`;
 }
 
 /**
@@ -140,15 +166,57 @@ async function manejar(
     limiteVerificado = true;
   };
 
+  // --- Otra página de una búsqueda ya hecha -----------------------------------
+  // Con el eco de sus filtros no hay nada que reinterpretar: ni router, ni
+  // hilo, ni modelo. Es el mismo WHERE con otro OFFSET.
+  if (peticion.filtros && (peticion.pagina ?? 1) > 1) {
+    const filtrosEco = deFiltrosAplicados(peticion.filtros);
+    const paginacionEco = normalizarPaginacion({ pagina: peticion.pagina, por_pagina: peticion.por_pagina });
+    const res = await carrilCatalogo(filtrosEco, paginacionEco, avisos);
+    traza.push(...res.pasos);
+    return respuestaJson(armarRespuesta(peticion.pregunta, 'catalogo', null, res, traza, t0), 200, req);
+  }
+
+  // --- Charla ---------------------------------------------------------------
+  // La cortesía del principio ("Hola, ¿me puedes decir…") no es parte de lo
+  // que se busca. Y si no queda nada más que cortesía, se contesta como tal.
+  const preguntaLimpia = quitarCortesia(peticion.pregunta);
+  const charla = detectarCharla(preguntaLimpia);
+  if (charla) {
+    const texto = await responderCharla(charla);
+    registrarConsulta({
+      usuario: sesion.usuario_id,
+      ip,
+      pregunta: peticion.pregunta,
+      modo: 'conversacion',
+      n_resultados: 0,
+      ms: performance.now() - t0,
+    });
+    const res: ResultadoCarril = {
+      modo: 'conversacion',
+      fichas: [],
+      total: 0,
+      pagina: 1,
+      por_pagina: 0,
+      aproximados: false,
+      reformulacion: null,
+      sintesis: { texto, temas: [], fichas_consideradas: 0, modelo: 'calculado' },
+      filtros: { autores: [], rango_pub: null, anios_referidos: [], temas: [], texto: null, seccion: null },
+      avisos: [],
+      pasos: [],
+    };
+    return respuestaJson(armarRespuesta(peticion.pregunta, 'conversacion', null, res, [], t0), 200, req);
+  }
+
   // --- Seguimiento de conversación -------------------------------------------
   // Solo la pregunta INMEDIATAMENTE anterior: alcanza para "¿y en 2010?" o
   // "de esos, cuáles son de mujeres" sin que el router cargue con toda la
   // conversación. `detectaSeguimiento` es la compuerta barata que evita
   // pagar el viaje al modelo en cada pregunta nueva e independiente.
-  let preguntaEfectiva = peticion.pregunta;
-  if (peticion.pregunta_anterior && detectaSeguimiento(peticion.pregunta)) {
+  let preguntaEfectiva = preguntaLimpia;
+  if (peticion.pregunta_anterior && detectaSeguimiento(preguntaLimpia)) {
     await verificarLimiteUnaVez();
-    const seguimiento = await reformularSeguimiento(peticion.pregunta_anterior, peticion.pregunta);
+    const seguimiento = await reformularSeguimiento(peticion.pregunta_anterior, preguntaLimpia);
     if (seguimiento.siguioElHilo) {
       preguntaEfectiva = seguimiento.pregunta;
       traza.push({
@@ -185,7 +253,7 @@ async function manejar(
     // Nunca se nombra el carril interno (panorama/hibrida/catalogo) en texto
     // que ve el editor: es una decisión de costo/arquitectura, no un concepto
     // de producto (el usuario nunca elige "modo").
-    detalle: `${clasificacion.origen} · ${clasificacion.razon}`,
+    detalle: comoSeEntendio(clasificacion),
     ms: Math.round(performance.now() - tRouter),
   });
 
@@ -262,13 +330,28 @@ async function manejar(
     ms,
   });
 
-  const respuesta: RespuestaOk = {
+  return respuestaJson(
+    armarRespuesta(preguntaEfectiva, modoSolicitado, degradado, resultado, traza, t0),
+    200,
+    req,
+  );
+}
+
+function armarRespuesta(
+  pregunta: string,
+  modoSolicitado: Modo,
+  degradado: RespuestaOk['degradado'],
+  resultado: ResultadoCarril,
+  traza: PasoTraza[],
+  t0: number,
+): RespuestaOk {
+  return {
     ok: true,
     version: VERSION_CONTRATO,
     modo: resultado.modo,
     modo_solicitado: modoSolicitado,
     degradado,
-    pregunta: preguntaEfectiva,
+    pregunta,
     filtros: aFiltrosAplicados(resultado.filtros),
     sintesis: resultado.sintesis,
     resultados: resultado.fichas,
@@ -279,10 +362,8 @@ async function manejar(
     reformulacion: resultado.reformulacion,
     avisos: resultado.avisos,
     traza,
-    ms: Math.round(ms),
+    ms: Math.round(performance.now() - t0),
   };
-
-  return respuestaJson(respuesta, 200, req);
 }
 
 Deno.serve(async (req: Request) => {
@@ -309,7 +390,7 @@ Deno.serve(async (req: Request) => {
           rechazar(
             new ErrorBuscar('TIEMPO_AGOTADO', 'La consulta tardó demasiado. Vuelve a intentarla.', {
               detalle: `Se agotaron ${TIMEOUT_TOTAL_MS} ms.`,
-              sugerencia: 'Si se repite, acota la pregunta o usa el modo Catálogo.',
+              sugerencia: 'Si se repite, acota la pregunta: por autor, por año o por sección responde más rápido.',
             }),
           ),
         TIMEOUT_TOTAL_MS,

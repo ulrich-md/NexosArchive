@@ -63,17 +63,69 @@ async function resumenCalculado(
 
   const [anioMin, anioMax] = await Promise.all([anioExtremo(true), anioExtremo(false)]);
 
-  const cifra = total === 1 ? '1 artículo' : `${total} artículos`;
-  const rango = anioMin != null && anioMax != null
-    ? anioMin === anioMax ? ` de ${anioMin}` : ` entre ${anioMin} y ${anioMax}`
-    : '';
-
   return {
-    texto: `${cifra}${rango} que cumplen: ${describirFiltros(filtros)}.`,
+    texto: fraseCatalogo(filtros, total, anioMin, anioMax),
     temas: [],
     fichas_consideradas: total,
     modelo: 'calculado',
   };
+}
+
+const conMiles = (n: number) => n.toLocaleString('es-MX');
+
+function unirNombres(nombres: string[]): string {
+  return nombres.length <= 1
+    ? (nombres[0] ?? '')
+    : `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
+}
+
+/**
+ * El resumen de catálogo, dicho como lo diría una persona —"Ángeles Mastretta
+ * tiene 74 textos en el archivo publicados entre 1990 y 1999"— y no como un
+ * volcado de filtros ("74 artículos que cumplen: autor: …"). Sigue siendo
+ * aritmética sobre datos reales: cero modelo, cero palabras inventadas.
+ */
+export function fraseCatalogo(
+  f: FiltrosConsulta,
+  total: number,
+  anioMin: number | null,
+  anioMax: number | null,
+): string {
+  const uno = total === 1;
+  const textos = `${conMiles(total)} ${uno ? 'texto' : 'textos'}`;
+
+  const sujeto = f.autores.length > 0
+    ? `${unirNombres(f.autores)} ${f.autores.length > 1 ? 'suman' : 'tiene'} ${textos} en el archivo`
+    : `El archivo tiene ${textos}`;
+
+  const detalles: string[] = [];
+  if (f.seccion) detalles.push(`en la sección ${f.seccion}`);
+  if (f.rango_pub) {
+    const verbo = uno ? 'publicado' : 'publicados';
+    detalles.push(
+      f.rango_pub.desde === f.rango_pub.hasta
+        ? `${verbo} en ${f.rango_pub.desde}`
+        : `${verbo} entre ${f.rango_pub.desde} y ${f.rango_pub.hasta}`,
+    );
+  }
+  if (f.anios_referidos.length > 0) {
+    const a = f.anios_referidos;
+    detalles.push(`${uno ? 'que habla' : 'que hablan'} de ${a.length === 1 ? a[0] : `${a[0]}–${a[a.length - 1]}`}`);
+  }
+  if (f.texto) detalles.push(`${uno ? 'que menciona' : 'que mencionan'} «${f.texto}»`);
+
+  let frase = `${sujeto}${detalles.length > 0 ? ` ${detalles.join(', ')}` : ''}.`;
+
+  if (uno) {
+    if (anioMin != null && !f.rango_pub) frase += ` Es de ${anioMin}.`;
+  } else if (anioMin != null && anioMax != null && !(f.rango_pub && f.rango_pub.desde === f.rango_pub.hasta)) {
+    frase += anioMin === anioMax
+      ? ` Todos son de ${anioMin}.`
+      : ` El primero es de ${anioMin} y el más reciente de ${anioMax}; van del más nuevo al más antiguo.`;
+  } else {
+    frase += ' Van del más nuevo al más antiguo.';
+  }
+  return frase;
 }
 
 /**

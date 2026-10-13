@@ -153,7 +153,8 @@ function deFormaBackend(d: Record<string, unknown>): Record<string, unknown> {
     articulos: d.resultados,
     respuesta: typeof sintesis?.texto === 'string' ? sintesis.texto : null,
     sugerencia: d.reformulacion ?? null,
-    archivo_vacio: d.total === 0 && (d.resultados as unknown[])?.length === 0,
+    archivo_vacio:
+      d.modo !== 'conversacion' && d.total === 0 && (d.resultados as unknown[])?.length === 0,
     traza: traza.map((p) => ({
       titulo: p.titulo,
       subtitulo: null,
@@ -174,7 +175,7 @@ function validarBuscar(crudo: unknown): RespuestaBuscar {
     crudo && typeof crudo === 'object' ? deFormaBackend(crudo as Record<string, unknown>) : crudo
   ) as Partial<RespuestaBuscar> | null;
 
-  const modosValidos = ['panorama', 'hibrida', 'catalogo'];
+  const modosValidos = ['panorama', 'hibrida', 'catalogo', 'conversacion'];
   const ok =
     !!d &&
     typeof d === 'object' &&
@@ -227,6 +228,7 @@ function validarBuscar(crudo: unknown): RespuestaBuscar {
     aproximados: d.aproximados === true,
     sugerencia: typeof d.sugerencia === 'string' ? d.sugerencia : null,
     archivo_vacio: d.archivo_vacio === true,
+    filtros: d.filtros ?? null,
     ms: typeof d.ms === 'number' ? d.ms : 0,
   };
 }

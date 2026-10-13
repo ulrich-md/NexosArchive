@@ -125,10 +125,71 @@ export function emparejarAutores(
   return encontrados;
 }
 
+const VERBO_AUTORIA =
+  /\b(escrito|escribio|escribe|escribia|publicado|publico|publica|firmado|firmo|opina|opinaba|opinado|dicho|dijo|piensa|pensaba)\b/;
+
+/** Lo que va antes del nombre y lo vuelve TEMA, no autor: "sobre Monsiváis". */
+const ANTES_DE_TEMA = new Set(['sobre', 'acerca', 'respecto', 'contra', 'hacia', 'entrevista', 'homenaje']);
+
+/**
+ * Un solo apellido ("¿Qué ha escrito Monsiváis?"), que es como se cita a la
+ * gente en una redacción. `emparejarAutores` exige dos piezas a propósito
+ * —"Aguilar" no puede decidir entre tres personas—, así que esto solo corre
+ * cuando aquella no encontró a nadie, y con tres salvaguardas para no
+ * confundir un apellido con un tema ("artículos de guerra" no es de Guerra):
+ *
+ *  1. La palabra se escribió con mayúscula (y no es solo el arranque de la
+ *     oración), o la pregunta trae un verbo de autoría ("escribió", "opina").
+ *  2. No va precedida de "sobre", "acerca de"…: ahí la persona es el tema.
+ *  3. Un solo autor la lleva, o los demás que la llevan son marginales
+ *     (menos de 20 textos y una décima parte del primero): si no, es
+ *     ambiguo y se le deja al router con modelo.
+ */
+export function emparejarApellido(
+  catalogo: { autor: string; clave: string; n: number }[],
+  pregunta: string,
+): AutorResuelto[] {
+  const palabras = pregunta.split(/[^\p{L}\p{N}]+/u).filter((p) => p !== '');
+  const hayVerbo = VERBO_AUTORIA.test(normalizar(pregunta));
+
+  for (let i = 0; i < palabras.length; i++) {
+    const original = palabras[i];
+    const t = normalizar(original);
+    if (t.length < 5 || esVacia(t) || /^\d+$/.test(t)) continue;
+
+    const mayuscula = /^\p{Lu}/u.test(original) && i > 0;
+    if (!mayuscula && !hayVerbo) continue;
+
+    const anterior = i > 0 ? normalizar(palabras[i - 1]) : '';
+    const anterior2 = i > 1 ? normalizar(palabras[i - 2]) : '';
+    if (ANTES_DE_TEMA.has(anterior) || ANTES_DE_TEMA.has(anterior2)) continue;
+
+    const candidatos = catalogo
+      .filter((a) => tokens(a.clave).includes(t))
+      .sort((a, b) => b.n - a.n);
+    if (candidatos.length === 0) continue;
+    // Compartido: solo si los demás son marginales (Catalina Aguilar Mastretta,
+    // 3 textos, frente a Ángeles, 557). Rubén Aguilar, con 40, no es marginal
+    // frente a Aguilar Camín: ahí decide el router con modelo.
+    if (
+      candidatos.length > 1 &&
+      (candidatos[1].n >= 20 || candidatos[0].n < 10 * candidatos[1].n)
+    ) continue;
+
+    return [{
+      autor: candidatos[0].autor,
+      n: candidatos[0].n,
+      ambiguos: candidatos.slice(1, 4).map((a) => a.autor),
+    }];
+  }
+  return [];
+}
+
 export async function detectarAutoresEnPregunta(pregunta: string): Promise<AutorResuelto[]> {
   const catalogo = await catalogoAutores();
   if (catalogo.length === 0) return [];
-  return emparejarAutores(catalogo, pregunta);
+  const completos = emparejarAutores(catalogo, pregunta);
+  return completos.length > 0 ? completos : emparejarApellido(catalogo, pregunta);
 }
 
 /** Filtros que se leen de la pregunta sin ayuda de ningún modelo. */
@@ -145,6 +206,21 @@ async function filtrosDeterministas(pregunta: string) {
  * duda al LLM cuesta centavos; mandar un catálogo al RAG cuesta latencia y
  * credibilidad.
  */
+/**
+ * Si el nombre de la pregunta lo comparten varias personas, se filtra por la
+ * de más obra y SE DICE, con los nombres reales: el editor ve a quién se
+ * entendió y puede corregir, en vez de recibir la obra de otra persona.
+ */
+export function avisosDeAmbiguedad(autores: AutorResuelto[]): Aviso[] {
+  return autores
+    .filter((a) => a.ambiguos.length > 0)
+    .map((a) => ({
+      codigo: 'AUTOR_AMBIGUO',
+      mensaje: `Entendí «${a.autor}». En el archivo también firma: ${a.ambiguos.join(', ')}.`,
+      detalle: 'Si buscabas a otra persona, escribe su nombre completo.',
+    }));
+}
+
 export function decidirHeuristica(
   pregunta: string,
   autores: AutorResuelto[],
@@ -166,7 +242,7 @@ export function decidirHeuristica(
       texto: null,
       origen: 'heuristica',
       razon: `La pregunta se resuelve con un filtro por autor${rango ? ' y año' : ''}.`,
-      avisos: [],
+      avisos: avisosDeAmbiguedad(autores),
     };
   }
 
@@ -182,7 +258,7 @@ export function decidirHeuristica(
       texto: null,
       origen: 'heuristica',
       razon: 'La pregunta acota por año de publicación y no pide un tema.',
-      avisos: [],
+      avisos: avisosDeAmbiguedad(autores),
     };
   }
 
@@ -205,7 +281,7 @@ export function decidirHeuristica(
       texto: residual,
       origen: 'heuristica',
       razon: `Busca «${residual}» por significado en lo que firmó ${autores.map((a) => a.autor).join(', ')}.`,
-      avisos: [],
+      avisos: avisosDeAmbiguedad(autores),
     };
   }
 
@@ -224,7 +300,7 @@ export function decidirHeuristica(
       texto: residual || (rango ? String(rango.desde) : null),
       origen: 'heuristica',
       razon: 'La pregunta pide una visión de conjunto del archivo.',
-      avisos: [],
+      avisos: avisosDeAmbiguedad(autores),
     };
   }
 

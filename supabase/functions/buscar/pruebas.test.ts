@@ -26,14 +26,15 @@ import {
   temaResidual,
 } from './texto.ts';
 import { armarFicha, idsValidos, SIN_AUTOR } from './fichas.ts';
-import { validarClasificacion, validarRespuesta } from './validacion.ts';
-import { sanearParrafos } from './texto.ts';
+import { validarClasificacion, validarFiltrosEco, validarRespuesta } from './validacion.ts';
+import { detectarCharla, quitarCortesia, sanearParrafos } from './texto.ts';
+import { fraseCatalogo } from './carriles/catalogo.ts';
 import { literalArreglo } from './carriles/comun.ts';
 import { hayTema, textoDeBusqueda } from './carriles/significado.ts';
 import { normalizarPaginacion, sinTemasFantasma } from './carriles/catalogo.ts';
 import { filtrosVacios } from './carriles/comun.ts';
 import { aEsquemaGemini } from './gemini.ts';
-import { decidirHeuristica, emparejarAutores } from './router.ts';
+import { decidirHeuristica, emparejarApellido, emparejarAutores } from './router.ts';
 import { temaResidual as residualDe } from './texto.ts';
 import type { FilaArticulo } from './tipos.ts';
 
@@ -370,4 +371,108 @@ Deno.test('dos personas con las mismas piezas: manda la de más obra, la otra qu
   const r = emparejarAutores(catalogo, 'lo de Ángeles Mastretta');
   assertEquals(r.length, 1);
   assertEquals(r[0].autor, 'Ángeles Mastretta');
+});
+
+// --- Interacción natural ----------------------------------------------------
+
+Deno.test('detectarCharla reconoce saludos, gracias y ayuda', () => {
+  assertEquals(detectarCharla('Hola'), 'saludo');
+  assertEquals(detectarCharla('¡Buenas tardes! ¿Qué tal?'), 'saludo');
+  assertEquals(detectarCharla('Muchas gracias'), 'gracias');
+  assertEquals(detectarCharla('perfecto'), 'gracias');
+  assertEquals(detectarCharla('¿Qué puedes hacer?'), 'ayuda');
+  assertEquals(detectarCharla('¿Cuántos artículos hay?'), 'ayuda');
+  assertEquals(detectarCharla('¿Cómo funciona?'), 'ayuda');
+});
+
+Deno.test('detectarCharla no se come búsquedas reales', () => {
+  assertEquals(detectarCharla('Todo lo que publicó Ángeles Mastretta en los noventa'), null);
+  assertEquals(detectarCharla('¿Qué se ha escrito sobre el 2006?'), null);
+  assertEquals(detectarCharla('gracias a la reforma electoral'), null);
+  assertEquals(detectarCharla('¿Cuántos artículos ha escrito Monsiváis?'), null);
+});
+
+Deno.test('quitarCortesia deja solo lo que se busca', () => {
+  assertEquals(
+    quitarCortesia('Hola, ¿me puedes decir qué escribió Monsiváis sobre el cine?'),
+    'qué escribió Monsiváis sobre el cine?',
+  );
+  assertEquals(quitarCortesia('Buenos días, quisiera saber qué hay sobre el 68'), 'qué hay sobre el 68');
+  assertEquals(quitarCortesia('Oye por favor dame lo de Krauze'), 'dame lo de Krauze');
+  // Si solo era cortesía se conserva: la contesta la charla.
+  assertEquals(quitarCortesia('Hola'), 'Hola');
+  assertEquals(quitarCortesia('Artículos de 1988 sobre fraude electoral'), 'Artículos de 1988 sobre fraude electoral');
+});
+
+Deno.test('detectaSeguimiento: pedidos de más y referencias a la respuesta anterior', () => {
+  assert(detectaSeguimiento('Profundiza en el segundo'));
+  assert(detectaSeguimiento('¿Cuáles de ellos son de los ochenta?'));
+  assert(detectaSeguimiento('Pero solo los de economía'));
+  assert(detectaSeguimiento('dame más'));
+});
+
+Deno.test('detectaSeguimiento no dispara con preguntas nuevas', () => {
+  assert(!detectaSeguimiento('Artículos de 1988 sobre fraude electoral'));
+  assert(!detectaSeguimiento('¿Qué ha escrito Ángeles Mastretta sobre comida?'));
+  assert(!detectaSeguimiento('Elecciones de 1994'));
+});
+
+Deno.test('un solo apellido basta con verbo de autoría o con mayúscula', () => {
+  assertEquals(emparejarApellido(CATALOGO, '¿qué ha escrito monsivais sobre el cine?').map((a) => a.autor), [
+    'Carlos Monsiváis',
+  ]);
+  assertEquals(emparejarApellido(CATALOGO, 'Textos de Monsiváis').map((a) => a.autor), ['Carlos Monsiváis']);
+});
+
+Deno.test('un apellido como tema no se vuelve autor', () => {
+  // Precedido de "sobre": la persona es el tema, no quien firma.
+  assertEquals(emparejarApellido(CATALOGO, '¿Qué se ha escrito sobre Monsiváis?'), []);
+  // Minúsculas y sin verbo de autoría: podría ser una palabra común.
+  assertEquals(emparejarApellido(CATALOGO, 'textos de monsivais'), []);
+  // "Aguilar" lo llevan tres personas sin que una domine: ambiguo.
+  assertEquals(emparejarApellido(CATALOGO, '¿Qué ha escrito Aguilar?'), []);
+});
+
+Deno.test('un apellido compartido se resuelve por el que domina y declara al otro', () => {
+  const r = emparejarApellido(CATALOGO, '¿Qué escribió Mastretta?');
+  assertEquals(r.map((a) => a.autor), ['Ángeles Mastretta']);
+  assertEquals(r[0].ambiguos, ['Catalina Aguilar Mastretta']);
+});
+
+Deno.test('fraseCatalogo habla como persona, con cifras reales', () => {
+  const f = { ...filtrosVacios(), autores: ['Ángeles Mastretta'], rango_pub: { desde: 1990, hasta: 1999 } };
+  assertEquals(
+    fraseCatalogo(f, 74, 1990, 1999),
+    'Ángeles Mastretta tiene 74 textos en el archivo publicados entre 1990 y 1999. ' +
+      'El primero es de 1990 y el más reciente de 1999; van del más nuevo al más antiguo.',
+  );
+  assertEquals(
+    fraseCatalogo({ ...filtrosVacios(), rango_pub: { desde: 1988, hasta: 1988 } }, 1291, 1988, 1988),
+    'El archivo tiene 1,291 textos publicados en 1988. Van del más nuevo al más antiguo.',
+  );
+  assertEquals(
+    fraseCatalogo({ ...filtrosVacios(), autores: ['Albrecht Mohrhardt Doger'] }, 1, 2021, 2021),
+    'Albrecht Mohrhardt Doger tiene 1 texto en el archivo. Es de 2021.',
+  );
+});
+
+Deno.test('validarFiltrosEco acepta el eco de una respuesta y rechaza basura', () => {
+  const eco = validarFiltrosEco({
+    autores: ['Ángeles Mastretta', 42],
+    anios_pub: { desde: 1990, hasta: 1999 },
+    anios_referidos: [1492, 2006],
+    temas: [],
+    texto: 'comida',
+    seccion: null,
+  });
+  assertEquals(eco, {
+    autores: ['Ángeles Mastretta'],
+    anios_pub: { desde: 1990, hasta: 1999 },
+    anios_referidos: [2006],
+    temas: [],
+    texto: 'comida',
+    seccion: null,
+  });
+  assertEquals(validarFiltrosEco('nada'), null);
+  assertEquals(validarFiltrosEco({ anios_pub: { desde: 1999, hasta: 1990 } })?.anios_pub, null);
 });

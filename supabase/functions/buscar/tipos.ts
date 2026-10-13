@@ -5,8 +5,12 @@
 
 export const VERSION_CONTRATO = 1;
 
-/** Los tres carriles de CLAUDE.md sección 4. */
-export type Modo = 'panorama' | 'hibrida' | 'catalogo';
+/**
+ * Los tres carriles de CLAUDE.md sección 4, más `conversacion`: saludos,
+ * gracias y preguntas sobre el buscador, que se contestan sin tocar el
+ * archivo. `conversacion` nunca se puede pedir desde la interfaz.
+ */
+export type Modo = 'panorama' | 'hibrida' | 'catalogo' | 'conversacion';
 
 /**
  * Códigos de error. La UI puede reaccionar al código; el `mensaje` es lo que
@@ -191,4 +195,11 @@ export interface Peticion {
    * pregunta antes de clasificarla.
    */
   pregunta_anterior?: string | null;
+  /**
+   * Eco de `filtros` de una respuesta anterior, para pedir OTRA PÁGINA de la
+   * misma búsqueda. Sin esto, la página 2 volvía a pasar por el router —sin
+   * el hilo de la conversación y a veces por el modelo—, que podía entender
+   * otra cosa y devolver la página 2 de una búsqueda distinta.
+   */
+  filtros?: FiltrosAplicados | null;
 }

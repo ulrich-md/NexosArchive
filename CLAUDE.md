@@ -622,6 +622,36 @@ cae a catálogo con error tipado `BUSQUEDA_HIBRIDA_NO_DISPONIBLE`; sin
 vectores cargados, busca solo por palabras y avisa `VECTORES_PENDIENTES`
 (sin gastar la llamada de embedding); si falla el vector de la pregunta,
 avisa `BUSQUEDA_SOLO_PALABRAS`.
+
+**La causa más profunda, medida en producción el mismo día:** "Mastretta +
+comida" daba **566 coincidencias por palabra**, casi toda su obra. El stemmer
+`spanish` de Postgres reduce "comida" a `'com'`, la misma raíz que "cómo"
+(verificado: `to_tsvector('spanish','cómo') @@ plainto_tsquery('spanish',
+'comida')` es `true`). Cualquier texto que pregunte "¿cómo…?" "habla de
+comida". Por eso `buscar_articulos_hibrido` usa la distancia del vector como
+filtro para TODOS los candidatos cuando hay vector de la pregunta (con un
+margen 30% más holgado para lo que además trae las palabras), no solo para
+los que llegan por el vector. Ojo con cualquier otra búsqueda por `ts`: una
+palabra cuya raíz es corta puede chocar con palabras vacías acentuadas.
+
+### Interacción natural: charla, cortesía, apellidos, paginación (2026-10-13)
+
+Problemas encontrados revisando el producto y probando la función en vivo
+(con la llave publishable de `web/.env`, que es pública por diseño):
+
+| Síntoma (verificado) | Causa | Arreglo |
+|---|---|---|
+| "Hola" gastaba una llamada a Gemini (4.8 s) y devolvía 196 artículos con "hola" en el título | Todo pasaba por el router como búsqueda | `detectarCharla()` (texto.ts) + `charla.ts`: saludo, gracias y "¿qué puedes hacer?" se contestan sin archivo ni modelo, modo `conversacion`. La cifra del archivo sale de la base |
+| "Hola, ¿me puedes decir qué escribió…" metía «hola» y «decir» en el tema | Nadie quitaba la cortesía | `quitarCortesia()` antes del router |
+| "¿Qué ha escrito Monsiváis?" gastaba el modelo solo para reconocer el apellido | `emparejarAutores` exige dos piezas del nombre | `emparejarApellido()`: una pieza basta con mayúscula o verbo de autoría, nunca tras "sobre", y solo si los demás que la llevan son marginales (<20 textos y <1/10 del primero). "Aguilar" sigue sin decidirse sola |
+| El router elegía al autor de más obra sin decir que el nombre era ambiguo | `ambiguos` se calculaba y nunca se enseñaba | Aviso `AUTOR_AMBIGUO` con los nombres reales |
+| La página 2 de un seguimiento ("¿y en 2010?") era de otra búsqueda | La paginación reenviaba el texto crudo sin el hilo y volvía a pasar por el router (a veces por el modelo) | La respuesta trae `filtros`; la UI los devuelve con `pagina>1` y el backend corre el mismo WHERE con otro OFFSET, sin router |
+| El hilo se perdía al segundo seguimiento | Se mandaba como contexto el texto crudo del turno anterior ("¿y en 2010?") | Se manda lo que el backend entendió (`respuesta.pregunta`) |
+| Resumen de catálogo: "566 artículos entre 1986 y 2026 que cumplen: autor: …" | Volcado de filtros | `fraseCatalogo()`: "Ángeles Mastretta tiene 74 textos en el archivo publicados entre 1990 y 1999…". Sigue siendo cero LLM |
+| "¿Cuántos artículos ha escrito X?" buscaba la palabra «cuántos» | No era palabra vacía | Palabras de conteo/obra a `VACIAS`: queda en catálogo, cuyo resumen trae la cifra |
+| Mensajes que mandaban al "modo Catálogo" (no existe en la UI) y traza con jerga ("heuristica · …") | Copy viejo | Copy en términos del editor |
+
+La charla no cuenta contra el límite de 30/hora (no llama al modelo).
 ---
 ## 5. Esquema
 ```sql

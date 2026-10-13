@@ -29,7 +29,8 @@ export async function verificarLimite(usuarioId: string | null, ip: string | nul
   let consulta = bd()
     .from('consultas')
     .select('id', { count: 'exact', head: true })
-    .neq('modo', 'catalogo')
+    // Ni catálogo ni charla llaman al modelo: no gastan el límite.
+    .not('modo', 'in', '(catalogo,conversacion)')
     .gt('creada_en', desde);
   consulta = usuarioId ? consulta.eq('usuario', usuarioId) : consulta.eq('ip', ip);
 
@@ -43,7 +44,7 @@ export async function verificarLimite(usuarioId: string | null, ip: string | nul
       `Llegaste al límite de ${LIMITE_CONSULTAS_HORA} consultas por hora.`,
       {
         detalle: `${usadas} consultas en la última hora.`,
-        sugerencia: 'El modo Catálogo sigue disponible: no consume el límite.',
+        sugerencia: 'Las búsquedas por autor, año o sección siguen funcionando: no consumen el límite.',
         reintentar_en_s: 600,
       },
     );

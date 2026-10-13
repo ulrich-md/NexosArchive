@@ -24,6 +24,17 @@ import {
   type Usuario,
 } from '@/lib/sesion';
 
+/**
+ * Lo que el backend entendió de un turno. Si era un seguimiento ("¿y en
+ * 2010?"), es la pregunta ya completa ("Todo lo de Mastretta en 2010"): es
+ * lo que hay que mandar como contexto del turno siguiente, no el texto
+ * crudo, que sin su propio contexto ya no significa nada.
+ */
+function preguntaEntendida(turno: Turno): string {
+  const entendida = turno.respuesta?.pregunta;
+  return entendida && entendida.trim() !== '' ? entendida : turno.pregunta;
+}
+
 function nuevoId() {
   return globalThis.crypto?.randomUUID?.() ?? String(Date.now() + Math.random());
 }
@@ -198,7 +209,7 @@ export default function App() {
       setMenuMovil(false);
 
       const id = nuevoId();
-      const preguntaAnterior = turnos.length > 0 ? turnos[turnos.length - 1].pregunta : null;
+      const preguntaAnterior = turnos.length > 0 ? preguntaEntendida(turnos[turnos.length - 1]) : null;
       setTurnos((ts) => [
         ...ts,
         { id, pregunta, estado: 'cargando', lento: false, respuesta: null, error: null, paginando: false },
@@ -212,7 +223,7 @@ export default function App() {
     (turno: Turno) => {
       if (ocupado) return;
       const indice = turnos.findIndex((t) => t.id === turno.id);
-      const preguntaAnterior = indice > 0 ? turnos[indice - 1].pregunta : null;
+      const preguntaAnterior = indice > 0 ? preguntaEntendida(turnos[indice - 1]) : null;
       setTurnos((ts) =>
         ts.map((t) =>
           t.id === turno.id
@@ -233,7 +244,14 @@ export default function App() {
       if (ocupado || turno.paginando) return;
       setTurnos((ts) => ts.map((t) => (t.id === turno.id ? { ...t, paginando: true } : t)));
 
-      buscar({ pregunta: turno.pregunta, pagina })
+      // La misma búsqueda, no otra: la pregunta YA entendida (si fue un
+      // seguimiento, ya trae el hilo resuelto) y el eco de sus filtros, para
+      // que el backend no la reinterprete ni gaste el modelo en cada página.
+      buscar({
+        pregunta: preguntaEntendida(turno),
+        pagina,
+        filtros: turno.respuesta?.filtros ?? undefined,
+      })
         .then((respuesta) => {
           setTurnos((ts) =>
             ts.map((t) => (t.id === turno.id ? { ...t, respuesta, paginando: false } : t)),

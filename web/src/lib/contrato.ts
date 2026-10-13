@@ -22,8 +22,9 @@
  *    Nada de fallas silenciosas.
  */
 
-/** Los tres carriles de la sección 4. */
-export type Modo = 'panorama' | 'hibrida' | 'catalogo';
+/** Los tres carriles de la sección 4, más `conversacion` (saludos, gracias,
+ *  "¿qué puedes hacer?"): se contesta sin tocar el archivo. */
+export type Modo = 'panorama' | 'hibrida' | 'catalogo' | 'conversacion';
 
 /** Iconos permitidos en un paso de la traza. El frontend los mapea a
  *  `lucide-react`; un valor desconocido cae en un icono genérico. */
@@ -81,6 +82,11 @@ export interface SolicitudBuscar {
    * cuenta — la reformulación es responsabilidad del router.
    */
   pregunta_anterior?: string | null;
+  /**
+   * Eco de `filtros` de la respuesta, para pedir otra página de la MISMA
+   * búsqueda sin que el backend la vuelva a interpretar. Opaco para la UI.
+   */
+  filtros?: unknown;
 }
 
 export interface RespuestaBuscar {
@@ -105,6 +111,9 @@ export interface RespuestaBuscar {
   sugerencia: string | null;
   /** true ⇒ la ingesta no ha corrido. La UI manda a /admin, no inventa datos. */
   archivo_vacio: boolean;
+  /** Filtros que de verdad se aplicaron. La UI no los interpreta: solo los
+   *  devuelve tal cual para pedir otra página. */
+  filtros: unknown;
   ms: number;
 }
 

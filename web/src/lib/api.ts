@@ -130,10 +130,12 @@ function deFormaBackend(d: Record<string, unknown>): Record<string, unknown> {
 
   const degradado = d.degradado as { desde: string; a: string; mensaje: string } | null;
   if (degradado) {
+    // Nunca se nombran los carriles internos (CLAUDE.md sección 3): el
+    // mensaje del backend ya dice qué pasó en términos del editor.
     traza.push({
       paso: 'degradacion',
-      titulo: `Se respondió por ${degradado.a}, no por ${degradado.desde}`,
-      detalle: degradado.mensaje,
+      titulo: degradado.mensaje,
+      detalle: '',
       ms: 0,
     });
   }

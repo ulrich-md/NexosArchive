@@ -97,20 +97,35 @@ export const ORIGENES_PERMITIDOS = (env('ORIGENES_PERMITIDOS') ?? '*')
   .map((o) => o.trim())
   .filter(Boolean);
 
-// --- Fase 2 -----------------------------------------------------------------
+// --- Búsqueda por significado ----------------------------------------------
 /**
- * Bandera de la fase 2 (cuerpo + chunks + embeddings). Apagada mientras no
- * exista el cuerpo de los artículos (CLAUDE.md sección 2, "Las dos fases").
- * Con la bandera apagada, el carril `hibrida` NO se cae en silencio: devuelve
- * un aviso tipado y degrada al carril que sí puede responder.
+ * Un vector por artículo (título + autores + sección + temas + resumen), con
+ * el mismo proveedor que ya paga todo lo demás: Gemini, con la misma llave.
+ * Tiene que ser EXACTAMENTE el modelo y la dimensión con que `npm run
+ * embeber` llenó la columna (`halfvec(768)`, migración 0006): un vector de
+ * otro modelo no es comparable aunque mida lo mismo.
  */
-export const FASE2_ACTIVA = bandera('FASE2_ACTIVA', false);
-/** URL del proveedor de embeddings (fase 2). Sin esto la bandera no sirve. */
-export const EMBEDDINGS_URL = () => env('EMBEDDINGS_URL');
-export const EMBEDDINGS_API_KEY = () => env('EMBEDDINGS_API_KEY');
-export const EMBEDDINGS_MODELO = env('EMBEDDINGS_MODELO') ?? '';
-/** Nombre de la función RPC de búsqueda vectorial que crea la fase 2. */
-export const RPC_CHUNKS_VECTOR = env('RPC_CHUNKS_VECTOR') ?? 'buscar_chunks_vector';
+export const MODELO_EMBEDDINGS = env('MODELO_EMBEDDINGS') ?? 'gemini-embedding-001';
+export const DIM_EMBEDDINGS = 768;
+export const TIMEOUT_EMBEDDING_MS = entero('TIMEOUT_EMBEDDING_MS', 5_000);
+/** Candidatos que la búsqueda híbrida le pasa al modelo para elegir y redactar. */
+export const HIBRIDA_CANDIDATOS = entero('HIBRIDA_CANDIDATOS', 40);
+/** Fichas que se enseñan si el modelo no pudo redactar (orden por RRF). */
+export const HIBRIDA_SIN_REDACCION = 8;
+/** Máximo de fichas citadas en una respuesta directa. */
+export const HIBRIDA_MAX_CITADAS = 15;
+/**
+ * Distancia coseno máxima para que un artículo que llegó SOLO por el vector
+ * cuente como candidato (lo que también trae las palabras entra siempre). El
+ * vector siempre devuelve vecinos aunque ninguno trate del tema: sin este
+ * tope, esos vecinos son los "artículos sin relación". Sin calibrar contra
+ * datos reales todavía: la traza enseña la distancia de cada búsqueda para
+ * ajustarlo.
+ */
+export const HIBRIDA_DISTANCIA_MAX = (() => {
+  const v = Number.parseFloat(env('HIBRIDA_DISTANCIA_MAX') ?? '');
+  return Number.isFinite(v) && v > 0 && v < 2 ? v : 0.5;
+})();
 
 // --- Límites de consulta ----------------------------------------------------
 export const PANORAMA_MIN_FILAS = entero('PANORAMA_MIN_FILAS', 200);

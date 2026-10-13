@@ -26,9 +26,10 @@ import {
   temaResidual,
 } from './texto.ts';
 import { armarFicha, idsValidos, SIN_AUTOR } from './fichas.ts';
-import { validarClasificacion, validarRerank, validarSintesis } from './validacion.ts';
+import { validarClasificacion, validarRespuesta } from './validacion.ts';
+import { sanearParrafos } from './texto.ts';
 import { literalArreglo } from './carriles/comun.ts';
-import { fusionRrf } from './carriles/hibrida.ts';
+import { hayTema, textoDeBusqueda } from './carriles/significado.ts';
 import { normalizarPaginacion, sinTemasFantasma } from './carriles/catalogo.ts';
 import { filtrosVacios } from './carriles/comun.ts';
 import { aEsquemaGemini } from './gemini.ts';
@@ -137,39 +138,49 @@ Deno.test('validarClasificacion limpia años imposibles y acota los arreglos', (
   assertEquals(c.autores.length, 3);
 });
 
-Deno.test('validarSintesis descarta ids que no existen', () => {
-  const s = validarSintesis({
-    sintesis: 'El conjunto reúne textos de temas distintos y de épocas distintas del archivo.',
-    temas: [
-      { titulo: 'Elecciones', descripcion: 'Sobre elecciones.', articulo_ids: [1, 999] },
-      { titulo: 'Fantasma', descripcion: 'Sin respaldo.', articulo_ids: [999] },
-    ],
-  }, new Set([1, 2]));
-  assertEquals(s.temas.length, 1);
-  assertEquals(s.temas[0].articulo_ids, [1]);
+Deno.test('validarRespuesta borra citas a ids que no se le dieron al modelo', () => {
+  const r = validarRespuesta({
+    texto: 'Mastretta vuelve a la cocina en [id:1] y en [id: 999], y a la mesa familiar en [ID:2].',
+    articulo_ids: [2, 777],
+  }, new Set([1, 2]), { exigirIds: false, maxIds: 10 });
+  assertEquals(r.texto, 'Mastretta vuelve a la cocina en [id:1] y en, y a la mesa familiar en [id:2].');
+  // Los citados en el texto cuentan aunque el modelo no los listara.
+  assertEquals(r.articulo_ids, [2, 1]);
 });
 
-Deno.test('validarSintesis tumba la respuesta si ninguna temática tiene respaldo', () => {
+Deno.test('validarRespuesta conserva los párrafos', () => {
+  const r = validarRespuesta({
+    texto: 'Primer párrafo sobre la comida [id:1].\n\nCocina: segundo párrafo con otra cita [id:2].',
+    articulo_ids: [1, 2],
+  }, new Set([1, 2]), { exigirIds: true, maxIds: 10 });
+  assertEquals(r.texto.split('\n\n').length, 2);
+});
+
+Deno.test('sanearParrafos no deja una cita cortada al truncar', () => {
+  const largo = 'a'.repeat(30) + ' [id:12345]';
+  assertEquals(sanearParrafos(largo, 36), 'a'.repeat(30) + '…');
+});
+
+Deno.test('validarRespuesta: panorama exige respaldo, directa acepta "no hay nada"', () => {
+  const nada = { texto: 'Ninguno de los textos candidatos trata de la comida.', articulo_ids: [] };
+  assertEquals(validarRespuesta(nada, new Set([1]), { exigirIds: false, maxIds: 10 }).articulo_ids, []);
+  assertThrows(() => validarRespuesta(nada, new Set([1]), { exigirIds: true, maxIds: 10 }));
+});
+
+Deno.test('validarRespuesta rechaza ligas y textos vacíos', () => {
   assertThrows(() =>
-    validarSintesis({
-      sintesis: 'Una síntesis suficientemente larga para pasar el mínimo de caracteres.',
-      temas: [{ titulo: 'Inventado', descripcion: 'x', articulo_ids: [999] }],
-    }, new Set([1]))
+    validarRespuesta(
+      { texto: 'Lee más en https://www.nexos.com.mx/?p=1 sobre la comida.', articulo_ids: [1] },
+      new Set([1]),
+      { exigirIds: false, maxIds: 10 },
+    )
   );
-});
-
-Deno.test('validarSintesis rechaza una síntesis con liga', () => {
   assertThrows(() =>
-    validarSintesis({
-      sintesis: 'Lee más en https://www.nexos.com.mx/?p=1 y en otros lados del archivo.',
-      temas: [{ titulo: 'T', descripcion: 'd', articulo_ids: [1] }],
-    }, new Set([1]))
+    validarRespuesta({ texto: '[id:1] [id:2]', articulo_ids: [1, 2] }, new Set([1, 2]), {
+      exigirIds: false,
+      maxIds: 10,
+    })
   );
-});
-
-Deno.test('validarRerank solo devuelve ids permitidos y respeta el tope', () => {
-  assertEquals(validarRerank({ ids: [3, 1, 77, 2] }, new Set([1, 2, 3]), 2), [3, 1]);
-  assertThrows(() => validarRerank({ ids: [77] }, new Set([1]), 8));
 });
 
 // --- SQL y fusión -----------------------------------------------------------
@@ -198,13 +209,18 @@ Deno.test('literalArreglo entrecomilla cada elemento', () => {
   assertEquals(literalArreglo([1988, 1994]), '{1988,1994}');
 });
 
-Deno.test('fusionRrf ordena por posición, no por puntaje crudo', () => {
-  const vector = [{ chunk_id: 1, articulo_id: 10 }, { chunk_id: 2, articulo_id: 20 }];
-  const texto = [{ chunk_id: 3, articulo_id: 20 }, { chunk_id: 4, articulo_id: 30 }];
-  const fusion = fusionRrf([vector, texto]);
-  // El 20 aparece en las dos listas: gana aunque nunca sea primero.
-  assertEquals(fusion[0].articulo_id, 20);
-  assertEquals(fusion.length, 3);
+Deno.test('textoDeBusqueda junta texto y temas sin repetir', () => {
+  assertEquals(
+    textoDeBusqueda({ ...filtrosVacios(), texto: 'fraude electoral', temas: ['Fraude', 'elecciones'] }),
+    'fraude electoral elecciones',
+  );
+  assertEquals(textoDeBusqueda(filtrosVacios()), null);
+});
+
+Deno.test('hayTema: años sueltos no son un tema', () => {
+  assert(!hayTema({ ...filtrosVacios(), texto: '2006' }));
+  assert(hayTema({ ...filtrosVacios(), texto: 'comida' }));
+  assert(hayTema({ ...filtrosVacios(), temas: ['elecciones'], texto: '1988' }));
 });
 
 Deno.test('detectaSeguimiento reconoce continuadores de conversación', () => {
@@ -277,6 +293,24 @@ Deno.test('"qué se ha escrito sobre el 2006" es panorama y usa años referidos'
   // El año va como año REFERIDO; la publicación no se acota.
   assertEquals(c!.rango_pub, null);
   assert(c!.anios_referidos.includes(2006));
+});
+
+Deno.test('autor real + tema es búsqueda por significado dentro de su obra, sin LLM', () => {
+  // La queja real que originó la búsqueda por significado.
+  const c = decidir('Que ha escrito angeles mastretta sobre comida', [MASTRETTA]);
+  assert(c !== null);
+  assertEquals(c!.modo, 'hibrida');
+  assertEquals(c!.texto, 'comida');
+  assertEquals(c!.temas, []);
+  assertEquals(c!.autores[0].autor, 'Ángeles Mastretta');
+  assertEquals(c!.rango_pub, null);
+});
+
+Deno.test('autor + tema + década acota la publicación', () => {
+  const c = decidir('¿Qué ha dicho Ángeles Mastretta sobre la comida en los noventa?', [MASTRETTA]);
+  assertEquals(c!.modo, 'hibrida');
+  assertEquals(c!.texto, 'comida');
+  assertEquals(c!.rango_pub, { desde: 1990, hasta: 1999 });
 });
 
 Deno.test('un tema con año no lo decide la heurística: lo manda al router', () => {

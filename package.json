@@ -10,6 +10,7 @@
     "ingesta-subdominios": "tsx scripts/ingesta-subdominios.ts",
     "recuperar-autores": "tsx scripts/recuperar-autores.ts",
     "enriquecer": "tsx scripts/enriquecer.ts",
+    "embeber": "tsx scripts/embeber.ts",
     "verificar": "tsx scripts/verificar.ts",
     "typecheck": "tsc --noEmit",
     "firmas-sitio": "tsx scripts/firmas-de-sitio.ts",

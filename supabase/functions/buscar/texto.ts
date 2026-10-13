@@ -32,6 +32,13 @@ const VACIAS = new Set([
   'articulos', 'articulo', 'textos', 'texto', 'nexos', 'revista', 'archivo',
   'publico', 'publicado', 'publicados', 'escrito', 'escribio', 'dame',
   'muestrame', 'lista', 'listado', 'quiero', 'ver', 'busca', 'buscar',
+  // Verbos y muletillas de pregunta: sin esto, "¿qué ha dicho Mastretta sobre
+  // comida?" buscaba también «dicho», que aparece en medio archivo.
+  'dicho', 'dijo', 'hablado', 'hablo', 'habla', 'opinado', 'opina', 'piensa',
+  'pensado', 'comentado', 'escribe', 'escriben', 'escribir', 'publica',
+  'acerca', 'respecto', 'cosas', 'algo', 'hay', 'cual', 'cuales', 'como',
+  'donde', 'cuando', 'sido', 'fue', 'era', 'tiene', 'tienen', 'mas', 'muy',
+  'tema', 'temas', 'esta', 'este', 'estos', 'estas', 'puedes', 'podrias',
 ]);
 
 export function esVacia(t: string): boolean {
@@ -154,6 +161,27 @@ const PATRON_SEGUIMIENTO =
 export function detectaSeguimiento(pregunta: string): boolean {
   const texto = normalizar(pregunta);
   return texto.length > 0 && PATRON_SEGUIMIENTO.test(texto);
+}
+
+/**
+ * Como `sanearTextoModelo`, pero conserva los párrafos (doble salto de línea):
+ * la interfaz corta la respuesta en párrafos por ahí (TextoRespuesta.tsx).
+ */
+export function sanearParrafos(s: unknown, maxLargo = 3_500): string {
+  if (typeof s !== 'string') return '';
+  const parrafos = s
+    .replace(/\r/g, '')
+    .split(/\n\s*\n/)
+    // Se trunca una sola vez, abajo, sobre el total.
+    .map((p) => sanearTextoModelo(p, Number.MAX_SAFE_INTEGER))
+    .filter((p) => p !== '');
+  let salida = parrafos.join('\n\n');
+  if (salida.length > maxLargo) {
+    // Sin dejar una marca de cita cortada a la mitad ("[id:12"), que la
+    // interfaz pintaría como texto.
+    salida = `${salida.slice(0, maxLargo - 1).replace(/\[[^\]]*$/, '').trimEnd()}…`;
+  }
+  return salida;
 }
 
 /** Un texto del modelo con URLs es sospechoso: el modelo no escribe ligas. */

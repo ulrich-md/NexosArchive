@@ -561,6 +561,67 @@ catálogo, que hereda esa paginación real). Catálogo directo (`Mastretta`,
 `Albrecht`) se verificó en vivo, página por página, antes y después: sigue
 avanzando bien. Panorama simplemente ya no ofrece un control que nunca pudo
 cumplir lo que prometía.
+
+### Búsqueda por significado a nivel de artículo, sin fase 2 (2026-10-13)
+
+Quejas reales: "¿Qué ha escrito Ángeles Mastretta sobre comida?" devolvía
+artículos sin relación, o "no hay nada", un resumen genérico, y a veces
+tardaba o fallaba. Pregunta del dueño: ¿cambiar a Claude? **No: el modelo
+no era el problema; la recuperación sí.** Claude habría resumido los mismos
+artículos equivocados. Tres causas encadenadas, leídas en el código:
+
+1. **Palabra literal.** La pregunta caía a `hibrida`, que estaba apagada
+   (`FASE2_ACTIVA=false`, esperaba chunks del cuerpo que nunca llegaron) y
+   degradaba siempre a `catalogo`: `tsvector` contra "comida". Mastretta
+   escribe "cocina", "mole", "la mesa": 0 coincidencias.
+2. **`aproximar()` sin tema.** Con 0 coincidencias quitaba el tema y enseñaba
+   sus 5 artículos más recientes: los "sin relación".
+3. **El resumen se tiraba.** La interfaz solo pinta `sintesis.texto`; el
+   prompt de panorama lo limitaba a 2–4 frases SIN citas, y las temáticas
+   agrupadas iban en un arreglo que la UI nunca enseñó.
+
+Y lo lento/error: "qué ha escrito X sobre Y" no casaba con ninguna
+heurística, así que gastaba una llamada a Gemini solo para clasificarse
+(cuota gratuita: 20 al día por modelo).
+
+Lo que se hizo:
+
+- **Un vector por artículo** (migración `0006_busqueda_por_significado.sql`),
+  `halfvec(768)` de `gemini-embedding-001` sobre título + autores + sección +
+  `temas` + `resumen_linea` — lo que el enriquecimiento ya dejó. No hace falta
+  el cuerpo (que por decisión del dueño no vive en la base, 0003), ni chunks.
+  `npm run embeber` los carga; es reanudable porque aquí `embedding IS NULL`
+  sí significa "pendiente" (un trigger lo vacía si cambia el texto del que
+  salió). Un vector no reconstruye ningún texto: no cambia el riesgo de fuga.
+- **Una sola consulta**, `buscar_articulos_hibrido()`: filtros duros (autor,
+  años) en el WHERE, ranking vectorial + texto (OR de palabras, no AND)
+  fusionados con RRF. Con filtro, distancia exacta sobre el subconjunto
+  (~600 filas para un autor) — un HNSW con WHERE filtra después de elegir
+  vecinos y pierde resultados —; sin filtro, índice HNSW. Lo que llega solo
+  por el vector necesita distancia ≤ `HIBRIDA_DISTANCIA_MAX` (0.5, **sin
+  calibrar con datos reales**: la traza enseña el rango de distancias de
+  cada consulta para ajustarlo). Probado en Postgres 16 + pgvector 0.8 con
+  datos sintéticos.
+- **`hibrida` reescrito a nivel artículo**: búsqueda → 40 candidatos → UNA
+  llamada al modelo que hace de rerank y redacción a la vez (descarta los
+  que son del autor pero no del tema). Si ninguno responde, lo dice y enseña
+  los cercanos como `aproximados`. Si el modelo falla, enseña los 8 mejores
+  por RRF. `FASE2_ACTIVA` y el código de chunks desaparecen.
+- **Router, escalón 2, caso nuevo**: autor real + tema ⇒ `hibrida`, sin LLM.
+  Más palabras vacías ("dicho", "opina", "hablado"…) para que no contaminen
+  el tema.
+- **Panorama, pase 0**: si la pregunta trae tema (no solo años), busca por
+  significado antes que por etiqueta exacta.
+- **Redacción con citas** (`carriles/redaccion.ts`, compartida): el texto va
+  en párrafos y cita con `[id:N]`, que `TextoRespuesta.tsx` ya convertía en el
+  título real con su liga. El modelo sigue sin escribir títulos; los ids que
+  no se le dieron se borran del texto antes de salir.
+
+Degradación, en cualquier orden de despliegue: sin la migración, `hibrida`
+cae a catálogo con error tipado `BUSQUEDA_HIBRIDA_NO_DISPONIBLE`; sin
+vectores cargados, busca solo por palabras y avisa `VECTORES_PENDIENTES`
+(sin gastar la llamada de embedding); si falla el vector de la pregunta,
+avisa `BUSQUEDA_SOLO_PALABRAS`.
 ---
 ## 5. Esquema
 ```sql

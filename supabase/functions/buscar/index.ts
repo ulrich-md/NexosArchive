@@ -7,17 +7,16 @@
 //   2. Sesión + lista blanca de dominio, en el servidor.
 //   3. Router: modo explícito de la UI → heurística determinista → Haiku.
 //   4. Límite de 30 consultas/hora, justo antes de la primera llamada a un LLM.
-//   5. Carril: catalogo (SQL puro) · panorama (una llamada a Sonnet) ·
-//      hibrida (fase 2, detrás de bandera; degrada con error tipado).
+//   5. Carril: catalogo (SQL puro) · panorama (una llamada al modelo) ·
+//      hibrida (significado + palabras en una consulta, y una llamada al
+//      modelo que elige y redacta). Si la búsqueda por significado no está
+//      instalada (migración 0006), degrada a catálogo con error tipado.
 //   6. Bitácora en `consultas` y respuesta con traza.
 //
 // QUÉ QUEDA SIN VERIFICAR (a la fecha de escritura):
-//   - El carril `hibrida` NO se ha ejecutado nunca: no hay chunks ni embeddings
-//     y la RPC de búsqueda vectorial la crea la fase 2. Está detrás de bandera.
-//   - El carril `panorama` no se ha ejecutado con `resumen_linea` ni
-//     `anios_referidos` poblados: el enriquecimiento (paso 3) todavía no corre.
-//     Mientras tanto degrada de forma explícita, con aviso y traza.
-//   - Las llamadas a Claude no se han corrido contra la API real desde aquí.
+//   - La búsqueda por significado se probó contra Postgres 16 + pgvector 0.8
+//     con datos sintéticos, no contra el archivo real: la distancia máxima
+//     (HIBRIDA_DISTANCIA_MAX) está sin calibrar. La traza la enseña.
 //   - Las pruebas de `pruebas.test.ts` cubren solo funciones puras
 //     (`deno test --allow-env supabase/functions/buscar/pruebas.test.ts`).
 
@@ -32,6 +31,7 @@ import { detectaSeguimiento } from './texto.ts';
 import { carrilCatalogo, normalizarPaginacion } from './carriles/catalogo.ts';
 import { carrilPanorama } from './carriles/panorama.ts';
 import { carrilHibrida } from './carriles/hibrida.ts';
+import { hayTema } from './carriles/significado.ts';
 import { aFiltrosAplicados, type FiltrosConsulta, type ResultadoCarril } from './carriles/comun.ts';
 import type { Clasificacion } from './router.ts';
 import {
@@ -201,20 +201,25 @@ async function manejar(
   // --- Carril ---------------------------------------------------------------
   let resultado: ResultadoCarril;
 
-  if (clasificacion.modo === 'catalogo') {
+  // Una "búsqueda" sin tema es un filtro: no hay nada que buscar por
+  // significado y no vale una llamada al modelo.
+  if (clasificacion.modo === 'hibrida' && !hayTema(filtros)) {
+    resultado = await carrilCatalogo(filtros, paginacion, avisos);
+  } else if (clasificacion.modo === 'catalogo') {
     resultado = await carrilCatalogo(filtros, paginacion, avisos);
   } else if (clasificacion.modo === 'panorama') {
     await verificarLimiteUnaVez();
     resultado = await carrilPanorama(preguntaEfectiva, filtros, avisos);
   } else {
-    // hibrida: fase 2. Con la bandera apagada lanza un error TIPADO y se
-    // degrada al carril que sí puede responder — nunca se cae en silencio.
+    // hibrida. Si la búsqueda por significado no está instalada en la base
+    // (migración 0006 sin aplicar), se degrada a catálogo con error TIPADO y
+    // se dice — nunca se cae en silencio.
     try {
       await verificarLimiteUnaVez();
       resultado = await carrilHibrida(preguntaEfectiva, filtros, avisos);
     } catch (e) {
       const err = comoErrorBuscar(e);
-      if (err.codigo !== 'FASE2_INACTIVA' && err.codigo !== 'FASE2_INCOMPLETA') throw err;
+      if (err.codigo !== 'BUSQUEDA_HIBRIDA_NO_DISPONIBLE') throw err;
 
       degradado = {
         desde: 'hibrida',
@@ -222,11 +227,6 @@ async function manejar(
         codigo: err.codigo,
         mensaje: err.message,
       };
-      avisos.push({
-        codigo: err.codigo,
-        mensaje: err.message,
-        detalle: err.detalle,
-      });
       traza.push({
         paso: 'degradacion',
         titulo: 'Búsqueda por significado no disponible',

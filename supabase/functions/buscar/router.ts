@@ -186,7 +186,30 @@ export function decidirHeuristica(
     };
   }
 
-  // (c) "¿Qué se ha escrito sobre X?" es panorama por definición.
+  // (c) Autor real + tema ⇒ búsqueda por significado DENTRO de su obra.
+  //     "¿Qué ha escrito Ángeles Mastretta sobre comida?" no es un catálogo
+  //     (no quiere sus 557 textos) ni un panorama del archivo entero: el
+  //     autor es filtro duro y el tema se busca por significado. Antes esto
+  //     caía al escalón 3 —una llamada a Gemini solo para clasificar, con la
+  //     cuota gratuita de 20 al día por modelo— y de ahí a la palabra
+  //     literal. Va antes que el patrón de panorama: con autor, la pregunta
+  //     es sobre su obra, no sobre el archivo.
+  if (autores.length > 0 && residual !== '') {
+    return {
+      modo: 'hibrida',
+      autores,
+      autores_no_resueltos: [],
+      rango_pub: rango,
+      anios_referidos: [],
+      temas: [],
+      texto: residual,
+      origen: 'heuristica',
+      razon: `Busca «${residual}» por significado en lo que firmó ${autores.map((a) => a.autor).join(', ')}.`,
+      avisos: [],
+    };
+  }
+
+  // (d) "¿Qué se ha escrito sobre X?" es panorama por definición.
   if (PATRON_PANORAMA.test(texto)) {
     const anios = rango ? expandirRango(rango) : [];
     return {

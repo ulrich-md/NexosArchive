@@ -31,8 +31,7 @@ export type CodigoError =
   | 'LLM_RECHAZO'
   | 'LLM_RESPUESTA_INVALIDA'
   | 'LLM_ERROR'
-  | 'FASE2_INACTIVA'
-  | 'FASE2_INCOMPLETA'
+  | 'BUSQUEDA_HIBRIDA_NO_DISPONIBLE'
   | 'TIEMPO_AGOTADO'
   | 'ERROR_INTERNO';
 
@@ -171,10 +170,12 @@ export interface FilaArticulo {
   numero: string | null;
   seccion: string | null;
   resumen_linea: string | null;
+  /** Etiquetas del enriquecimiento. Solo van al prompt; la ficha no las usa. */
+  temas?: string[] | null;
 }
 
 export const COLUMNAS_ARTICULO =
-  'id,url,titulo,autores,autor_confianza,fecha_pub,anio_pub,numero,seccion,resumen_linea';
+  'id,url,titulo,autores,autor_confianza,fecha_pub,anio_pub,numero,seccion,resumen_linea,temas';
 
 /** Petición que acepta la función. */
 export interface Peticion {

@@ -4,8 +4,8 @@
 
 import { ANIO_MAX, ANIO_MIN } from './config.ts';
 import { ErrorBuscar } from './errores.ts';
-import { contieneLiga, sanearTextoModelo } from './texto.ts';
-import type { Modo, Tematica } from './tipos.ts';
+import { contieneLiga, sanearParrafos, sanearTextoModelo } from './texto.ts';
+import type { Modo } from './tipos.ts';
 
 const MODOS: Modo[] = ['panorama', 'hibrida', 'catalogo'];
 
@@ -178,122 +178,85 @@ export function validarSeguimiento(crudo: unknown): SeguimientoCrudo {
   };
 }
 
-// --- Síntesis del modo panorama ---------------------------------------------
+// --- Respuesta redactada (panorama e hibrida) -------------------------------
+//
+// Antes la síntesis era un párrafo de 2–4 frases SIN citas, más un arreglo de
+// temáticas que la interfaz nunca enseña (solo pinta `sintesis.texto`). El
+// editor veía un resumen genérico que no le decía qué texto decía qué. Ahora
+// el texto cita con marcas `[id:N]`, que la interfaz convierte en el título
+// REAL de la base con su liga (TextoRespuesta.tsx): el modelo sigue sin
+// escribir títulos, solo señala ids.
 
-export interface SintesisCruda {
+export interface RespuestaCruda {
   texto: string;
-  temas: Tematica[];
+  articulo_ids: number[];
 }
 
-export const ESQUEMA_SINTESIS = {
+export const ESQUEMA_RESPUESTA = {
   type: 'object',
   additionalProperties: false,
-  required: ['sintesis', 'temas'],
+  required: ['texto', 'articulo_ids'],
   properties: {
-    sintesis: {
+    texto: {
       type: 'string',
       description:
-        'De dos a cuatro frases, en español de México, describiendo qué hay en el conjunto. ' +
-        'Prohibido escribir títulos, nombres de autor, fechas o ligas: para eso están los ids.',
+        'La respuesta, en español de México, en párrafos separados por una línea en blanco. ' +
+        'Cada vez que te refieras a un texto del archivo escribe su marca [id:N] (N = el id de la ficha) ' +
+        'en lugar de su título. Prohibido escribir títulos, fechas o ligas.',
     },
-    temas: {
-      type: 'array',
-      minItems: 3,
-      maxItems: 6,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['titulo', 'descripcion', 'articulo_ids'],
-        properties: {
-          titulo: { type: 'string', description: 'Nombre corto de la temática.' },
-          descripcion: {
-            type: 'string',
-            description: 'Una o dos frases sobre qué agrupa esta temática.',
-          },
-          articulo_ids: {
-            type: 'array',
-            items: { type: 'integer' },
-            description:
-              'Ids EXACTOS de los artículos de la lista que pertenecen a esta temática. ' +
-              'Solo ids que aparezcan en la lista; nunca inventes uno.',
-          },
-        },
-      },
-    },
-  },
-} as const;
-
-/**
- * Valida la síntesis y descarta todo id que no exista entre los que se le
- * dieron al modelo. Si al final no queda ninguna temática con respaldo real,
- * la respuesta se descarta entera (sección 7, regla 1).
- */
-export function validarSintesis(crudo: unknown, idsPermitidos: Set<number>): SintesisCruda {
-  if (!esObjeto(crudo)) throw invalido('La síntesis no es un objeto.');
-
-  const texto = sanearTextoModelo(crudo.sintesis, 900);
-  if (texto.length < 20) throw invalido('La síntesis viene vacía o es demasiado corta.');
-  if (contieneLiga(texto)) throw invalido('La síntesis trae una liga: el modelo no escribe URLs.');
-
-  if (!Array.isArray(crudo.temas)) throw invalido('temas no es un arreglo.');
-
-  const temas: Tematica[] = [];
-  for (const bruto of crudo.temas) {
-    if (!esObjeto(bruto)) continue;
-    const titulo = sanearTextoModelo(bruto.titulo, 80);
-    const descripcion = sanearTextoModelo(bruto.descripcion, 400);
-    if (titulo.length < 2) continue;
-    if (contieneLiga(titulo) || contieneLiga(descripcion)) continue;
-
-    const ids: number[] = [];
-    if (Array.isArray(bruto.articulo_ids)) {
-      for (const idBruto of bruto.articulo_ids) {
-        const n = typeof idBruto === 'number' ? idBruto : Number.parseInt(String(idBruto), 10);
-        if (Number.isInteger(n) && idsPermitidos.has(n) && !ids.includes(n)) ids.push(n);
-        if (ids.length >= 20) break;
-      }
-    }
-    // Una temática sin un solo artículo real no se enseña: sería una afirmación
-    // sin respaldo en el archivo.
-    if (ids.length === 0) continue;
-
-    temas.push({ titulo, descripcion, articulo_ids: ids });
-    if (temas.length >= 6) break;
-  }
-
-  if (temas.length === 0) {
-    throw invalido('Ninguna temática quedó respaldada por ids reales del archivo.');
-  }
-
-  return { texto, temas };
-}
-
-// --- Rerank de la fase 2 ----------------------------------------------------
-
-export const ESQUEMA_RERANK = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['ids'],
-  properties: {
-    ids: {
+    articulo_ids: {
       type: 'array',
       items: { type: 'integer' },
       description:
-        'Los ids de artículo más pertinentes, del más al menos pertinente. ' +
-        'Solo ids de la lista dada; nunca inventes uno.',
+        'Ids de las fichas que de verdad responden la pregunta, de la más a la menos pertinente. ' +
+        'Solo ids que aparezcan en la lista; nunca inventes uno. Vacío si ninguna responde.',
     },
   },
 } as const;
 
-export function validarRerank(crudo: unknown, idsPermitidos: Set<number>, max: number): number[] {
-  if (!esObjeto(crudo)) throw invalido('El rerank no es un objeto.');
-  if (!Array.isArray(crudo.ids)) throw invalido('El rerank no trae ids.');
-  const salida: number[] = [];
-  for (const bruto of crudo.ids) {
-    const n = typeof bruto === 'number' ? bruto : Number.parseInt(String(bruto), 10);
-    if (Number.isInteger(n) && idsPermitidos.has(n) && !salida.includes(n)) salida.push(n);
-    if (salida.length >= max) break;
+const MARCA = /\[\s*id\s*[:=]?\s*(\d+)\s*\]/gi;
+
+/**
+ * Valida la respuesta y descarta todo id que no se le haya dado al modelo,
+ * tanto en `articulo_ids` como en las marcas del texto (sección 7, regla 1).
+ * Los ids citados en el texto cuentan como pertinentes aunque el modelo haya
+ * olvidado listarlos: una cita sin ficha sería una cita rota.
+ */
+export function validarRespuesta(
+  crudo: unknown,
+  idsPermitidos: Set<number>,
+  op: { exigirIds: boolean; maxIds: number },
+): RespuestaCruda {
+  if (!esObjeto(crudo)) throw invalido('La respuesta no es un objeto.');
+
+  let texto = sanearParrafos(crudo.texto, 3_500);
+  if (contieneLiga(texto)) throw invalido('La respuesta trae una liga: el modelo no escribe URLs.');
+
+  const citados: number[] = [];
+  texto = texto.replace(MARCA, (_m, n: string) => {
+    const id = Number.parseInt(n, 10);
+    if (!idsPermitidos.has(id)) return '';
+    if (!citados.includes(id)) citados.push(id);
+    return `[id:${id}]`;
+  })
+    .replace(/[ \t]+([,.;:])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ');
+
+  if (texto.replace(MARCA, '').trim().length < 20) {
+    throw invalido('La respuesta viene vacía o es demasiado corta.');
   }
-  if (salida.length === 0) throw invalido('El rerank no devolvió ningún id válido.');
-  return salida;
+
+  const ids: number[] = [];
+  const brutos = Array.isArray(crudo.articulo_ids) ? crudo.articulo_ids : [];
+  for (const bruto of [...brutos, ...citados]) {
+    const n = typeof bruto === 'number' ? bruto : Number.parseInt(String(bruto), 10);
+    if (Number.isInteger(n) && idsPermitidos.has(n) && !ids.includes(n)) ids.push(n);
+    if (ids.length >= op.maxIds) break;
+  }
+
+  if (op.exigirIds && ids.length === 0) {
+    throw invalido('La respuesta no quedó respaldada por ningún id real del archivo.');
+  }
+
+  return { texto, articulo_ids: ids };
 }

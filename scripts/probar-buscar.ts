@@ -19,6 +19,8 @@ const CONSULTAS: { pregunta: string; modo?: string }[] = [
   { pregunta: '¿Qué se ha escrito en Nexos sobre el 2006?' },
   { pregunta: 'Todo lo de Aguilar Camín en los noventa' },
   { pregunta: 'Aguilar Camín' },
+  // La queja que originó la búsqueda por significado (2026-10-13).
+  { pregunta: 'Que ha escrito angeles mastretta sobre comida' },
 ];
 
 for (const c of CONSULTAS) {

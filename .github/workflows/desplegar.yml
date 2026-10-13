@@ -1,0 +1,160 @@
+# Despliegue del Archivo Nexos sin computadora local.
+#
+# Hace lo que antes había que correr a mano desde el repo:
+#   1. Aplicar una migración (por la Management API de Supabase).
+#   2. Desplegar las Edge Functions `buscar` y `facetas`.
+#   3. Cargar los vectores pendientes (`npm run embeber`).
+#   4. Probar la función en vivo.
+#
+# Cuándo corre:
+#   - A mano (Actions → "Desplegar archivo" → Run workflow): todo lo anterior.
+#   - En cada push a la rama por defecto que toque supabase/functions: solo
+#     despliega. Así "subir el código" y "que esté vivo" son lo mismo.
+#   - Una vez al día: solo carga vectores pendientes. La cuota gratuita de
+#     Gemini se acaba a mitad de la carga inicial; esto la retoma solo, y
+#     también rehace los vectores que un re-enriquecimiento haya vaciado.
+#
+# Secretos del repo (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  token personal de supabase.com/dashboard/account/tokens
+#   GEMINI_API_KEY         llave de aistudio.google.com/apikey
+# La service role NO se guarda en GitHub: se pide a la Management API en cada
+# corrida y se enmascara en los logs.
+
+name: Desplegar archivo
+
+on:
+  workflow_dispatch:
+    inputs:
+      migracion:
+        description: 'Migración a aplicar, p. ej. 0006_busqueda_por_significado.sql (vacío = ninguna)'
+        required: false
+        default: ''
+      desplegar:
+        description: 'Desplegar las Edge Functions'
+        type: boolean
+        default: true
+      embeber:
+        description: 'Cargar vectores pendientes'
+        type: boolean
+        default: true
+  push:
+    branches: [claude/nueva-sesion-ituzea]
+    paths: ['supabase/functions/**']
+  schedule:
+    - cron: '17 9 * * *'
+
+concurrency:
+  group: desplegar-archivo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Públicos: ya viven en web/.env, que se sirve en el bundle del navegador.
+  PROJECT_REF: tedudsobbqjmgulzksmw
+  SUPABASE_URL: https://tedudsobbqjmgulzksmw.supabase.co
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Revisar secretos
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error::Falta el secreto SUPABASE_ACCESS_TOKEN (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - name: Aplicar migración
+        if: github.event_name == 'workflow_dispatch' && inputs.migracion != ''
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          MIGRACION: ${{ inputs.migracion }}
+        run: |
+          # Solo nombres de archivo de migración: nada de rutas ni comandos.
+          if ! [[ "$MIGRACION" =~ ^[0-9]{4}_[a-z0-9_]+\.sql$ ]]; then
+            echo "::error::Nombre de migración inválido: $MIGRACION"; exit 1
+          fi
+          archivo="supabase/migrations/$MIGRACION"
+          if [ ! -f "$archivo" ]; then
+            echo "::error::No existe $archivo"; exit 1
+          fi
+          jq -Rs '{query: .}' "$archivo" > /tmp/consulta.json
+          curl -sS --fail-with-body -X POST \
+            "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @/tmp/consulta.json
+          echo
+          echo "Migración $MIGRACION aplicada."
+
+      - uses: supabase/setup-cli@v1
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.desplegar)
+        with:
+          version: latest
+
+      - name: Desplegar Edge Functions
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.desplegar)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          # --no-verify-jwt es OBLIGATORIO: el frontend llama con una llave
+          # `sb_publishable_…`, que no es un JWT. Sin esta bandera la función
+          # rechaza todas las consultas del sitio. La seguridad del archivo no
+          # depende de esto: las tablas no tienen ninguna policy de SELECT y
+          # la función lee con service role (CLAUDE.md sección 6).
+          supabase functions deploy buscar --project-ref "$PROJECT_REF" --no-verify-jwt
+          supabase functions deploy facetas --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.embeber)
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cargar vectores pendientes
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.embeber)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::Falta el secreto GEMINI_API_KEY (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          llaves=$(curl -sS --fail-with-body \
+            "https://api.supabase.com/v1/projects/$PROJECT_REF/api-keys?reveal=true" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")
+          SUPABASE_SERVICE_ROLE_KEY=$(echo "$llaves" | jq -r \
+            '[.[] | select(.name == "service_role" or .type == "secret") | .api_key | select(. != null)][0] // empty')
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::La Management API no devolvió la service role."; exit 1
+          fi
+          echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"
+          export SUPABASE_SERVICE_ROLE_KEY
+          npm ci --no-audit --no-fund
+          npm run embeber
+
+      - name: Probar en vivo
+        if: github.event_name != 'schedule'
+        run: |
+          llave=$(grep '^VITE_SUPABASE_ANON_KEY=' web/.env | cut -d= -f2-)
+          for pregunta in 'Hola' 'Que ha escrito angeles mastretta sobre comida'; do
+            echo "=== $pregunta"
+            jq -n --arg p "$pregunta" '{pregunta: $p}' > /tmp/pregunta.json
+            curl -sS -m 60 -X POST "$SUPABASE_URL/functions/v1/buscar" \
+              -H "content-type: application/json" -H "apikey: $llave" -H "Authorization: Bearer $llave" \
+              --data @/tmp/pregunta.json \
+            | jq -r '"modo: \(.modo) · total: \(.total) · \(.ms) ms",
+                     (.traza[]? | "  paso: \(.titulo) | \(.detalle)"),
+                     (.avisos[]? | "  aviso: \(.mensaje)"),
+                     "  respuesta: \((.sintesis.texto // "") | .[0:400])",
+                     (.resultados[:5][]? | "  - \(.titulo) · \(.fecha_pub)"),
+                     (.error // empty | "  ERROR: \(.)")'
+          done

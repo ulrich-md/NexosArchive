@@ -86,6 +86,16 @@ dominio. Ojo con una trampa: el `fetch` de Node no lee `HTTPS_PROXY` (curl sí),
 lo que detrás de un proxy obligatorio todo falla con 403 sin explicación.
 `scripts/lib/red.ts` lo resuelve y no estorba cuando no hay proxy.
 
+## Desplegar sin computadora local (GitHub Actions)
+
+`.github/workflows/desplegar.yml` aplica una migración, despliega las Edge
+Functions (con `--no-verify-jwt`, obligatorio porque el frontend usa una llave
+`sb_publishable_…`), carga los vectores pendientes y prueba la función en vivo.
+Necesita dos secretos del repo: `SUPABASE_ACCESS_TOKEN` y `GEMINI_API_KEY`.
+Se corre desde Actions → "Desplegar archivo" → Run workflow; además despliega
+solo en cada push que toque `supabase/functions/` y retoma la carga de vectores
+una vez al día.
+
 ## Búsqueda por significado (migración 0006)
 
 Hace falta para preguntas de autor + tema («¿Qué ha escrito Ángeles Mastretta sobre

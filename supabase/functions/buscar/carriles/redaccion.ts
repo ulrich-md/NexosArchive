@@ -27,6 +27,8 @@ const COMUNES = [
   'Reglas que no se negocian:',
   '- Para referirte a un texto escribe su marca [id:N], con el id de su ficha. La aplicación la',
   '  convierte en el título real con su liga. NUNCA escribas títulos, fechas ni ligas.',
+  '  Úsala como si fuera el título dentro de la frase, sin coma detrás: "En [id:12] narra…",',
+  '  "[id:40] cuenta…"; no "[id:12], narra…".',
   '- No escribas nombres de autores, salvo el de la persona por la que se preguntó: la ficha',
   '  de cada texto, que la interfaz enseña junto a la cita, ya dice quién lo firmó.',
   '- Habla de lo que dicen los títulos, temas y resúmenes de las fichas; no supongas más.',

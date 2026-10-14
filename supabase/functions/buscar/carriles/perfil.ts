@@ -24,7 +24,8 @@ import { buscarArticulos, type FiltrosConsulta, type ResultadoCarril } from './c
 import { redactar } from './redaccion.ts';
 
 const VIGENCIA_MS = 30 * 24 * 60 * 60 * 1000;
-const VERSION = 'perfil:v1';
+// Cambiar la versión invalida lo guardado (p. ej. al cambiar el prompt).
+const VERSION = 'perfil:v2';
 
 function claveDe(f: FiltrosConsulta): string {
   return `${VERSION}:${JSON.stringify({

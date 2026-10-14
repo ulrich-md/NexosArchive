@@ -78,7 +78,7 @@ Fase 1 en construcción (orden de trabajo, sección 9 de `CLAUDE.md`):
 | `npm run autores` | Construye `datos/autores.json` (id de coautor → nombre real con acentos) |
 | `npm run ingesta` | Carga/actualiza metadata de los 19,145 artículos desde WordPress |
 | `npm run verificar` | Compara la base local contra la API y falla si no cuadra |
-| `npm run embeber` | Un vector por artículo para la búsqueda por significado (requiere la migración 0006). Reanudable: solo procesa `embedding IS NULL` |
+| `npm run embeber` | Un vector por artículo para la búsqueda por significado (requiere las migraciones 0006 y 0007). Reanudable: solo procesa lo que no tiene fila en `articulos_vectores` |
 | `npm run typecheck` | `tsc --noEmit` sobre `scripts/` |
 
 Los tres primeros pegan a `nexos.com.mx`, así que necesitan salida de red hacia ese
@@ -103,8 +103,9 @@ comida?») y de tema en general. Sin ella el buscador exige la palabra literal. 
 de despliegue (cualquier otro orden también funciona: cada pieza degrada si falta la
 anterior, y lo dice en la traza):
 
-1. Aplica `supabase/migrations/0006_busqueda_por_significado.sql` (SQL Editor o
-   `supabase db push`).
+1. Aplica `supabase/migrations/0006_busqueda_por_significado.sql` y luego
+   `0007_vectores_en_tabla_aparte.sql` (SQL Editor, `supabase db push`, o el
+   workflow de GitHub Actions, que aplica la 0007 por defecto).
 2. Despliega la Edge Function: `supabase functions deploy buscar`.
 3. Carga los vectores: `npm run embeber` (usa `GEMINI_API_KEY` del `.env`). Si se
    agota la cuota gratuita del día, se detiene sin perder nada; vuelve a correrlo.

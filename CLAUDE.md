@@ -652,6 +652,25 @@ Problemas encontrados revisando el producto y probando la función en vivo
 | Mensajes que mandaban al "modo Catálogo" (no existe en la UI) y traza con jerga ("heuristica · …") | Copy viejo | Copy en términos del editor |
 
 La charla no cuenta contra el límite de 30/hora (no llama al modelo).
+
+### Los vectores van en su propia tabla (2026-10-14)
+
+Primera carga real por GitHub Actions (`.github/workflows/desplegar.yml`): el
+primer lote de 100 vectores se guardó y el segundo murió con `canceling
+statement due to statement timeout`. La 0006 guardaba el vector como columna
+de `articulos`; actualizarla reescribe la fila completa y todos sus índices,
+incluido el GIN de `ts`, que es enorme porque indexa el cuerpo de los
+subdominios, y PostgREST corta a los ~8 s. La migración
+`0007_vectores_en_tabla_aparte.sql` los muda a `articulos_vectores` (con su
+propio HNSW, RLS sin policies, trigger que borra el vector si cambia el
+texto) y conserva lo ya cargado. Medido en local: guardar 100 vectores, 0.36 s.
+Regla general: **nunca escribir en lote sobre `articulos` algo que no sea
+metadata**: cada UPDATE paga los cuatro GIN.
+
+Ojo con la cuota gratuita de embeddings: el primer 429 llegó tras UNA
+petición de 100 textos, así que el cupo por minuto cuenta textos, no
+peticiones (~100 por minuto). La carga completa (~33k) no cabe en una corrida;
+el workflow la retoma solo cada día.
 ---
 ## 5. Esquema
 ```sql

@@ -6,10 +6,10 @@
 // palabra literal. El vector sale del título, autores, sección, temas y
 // `resumen_linea` que ya dejó el enriquecimiento.
 //
-// Reanudable sin bitácora: `embedding IS NULL` es exactamente lo pendiente
-// (a diferencia de `resumen_linea`, ver CLAUDE.md §2). Si el texto de un
-// artículo cambia —un re-enriquecimiento, un título corregido—, un trigger
-// vacía su vector y la siguiente corrida lo rehace.
+// Reanudable sin bitácora: un artículo sin fila en `articulos_vectores` es
+// exactamente lo pendiente (a diferencia de `resumen_linea`, ver CLAUDE.md
+// §2). Si el texto de un artículo cambia —un re-enriquecimiento, un título
+// corregido—, un trigger borra su vector y la siguiente corrida lo rehace.
 //
 // Uso:
 //   npm run embeber                 # todo lo pendiente
@@ -50,20 +50,15 @@ const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const bd = clienteSupabase();
 
-const { count: pendientes, error: errConteo } = await bd
-  .from('articulos')
-  .select('id', { count: 'exact', head: true })
-  .is('embedding', null);
+// Los vectores viven en su propia tabla (migración 0007): "pendiente" es
+// "sin fila en articulos_vectores", y lo cuentan y listan dos RPC.
+const { data: pendientesCrudo, error: errConteo } = await bd.rpc('contar_sin_vector');
+const pendientes = Number(pendientesCrudo ?? 0);
 if (errConteo) {
-  // Un conteo con `head: true` no trae cuerpo: si la columna no existe, el
-  // error llega con `message` VACÍO (pasó en la primera corrida del workflow).
-  // Se repite la consulta sin `head` para obtener el motivo real.
-  const { error: detalle } = await bd.from('articulos').select('id').is('embedding', null).limit(1);
-  const motivo = detalle?.message || errConteo.message || '(sin detalle)';
   console.error(
-    /embedding/.test(motivo)
-      ? 'La columna `embedding` no existe: falta aplicar supabase/migrations/0006_busqueda_por_significado.sql.'
-      : `No se pudo contar lo pendiente: ${motivo}`,
+    /contar_sin_vector|could not find|does not exist/i.test(errConteo.message)
+      ? 'Falta aplicar supabase/migrations/0007_vectores_en_tabla_aparte.sql.'
+      : `No se pudo contar lo pendiente: ${errConteo.message || errConteo.code || '(sin detalle)'}`,
   );
   process.exit(1);
 }
@@ -83,13 +78,7 @@ for (;;) {
 
   // Por id ascendente y con cursor: un artículo que fallara siempre no puede
   // atorar la corrida en un bucle.
-  const { data, error } = await bd
-    .from('articulos')
-    .select('id,titulo,autores,seccion,temas,resumen_linea')
-    .is('embedding', null)
-    .gt('id', ultimoId)
-    .order('id', { ascending: true })
-    .limit(tope);
+  const { data, error } = await bd.rpc('articulos_sin_vector', { p_despues: ultimoId, p_limite: tope });
   if (error) {
     console.error(`Error leyendo artículos: ${error.message}`);
     process.exit(1);
@@ -142,10 +131,8 @@ for (;;) {
   await dormir(PAUSA_MS);
 }
 
-const { count: restantes } = await bd
-  .from('articulos')
-  .select('id', { count: 'exact', head: true })
-  .is('embedding', null);
+const { data: restantesCrudo } = await bd.rpc('contar_sin_vector');
+const restantes = Number(restantesCrudo ?? 0);
 console.log(
   `\nListo: ${hechos.toLocaleString('es-MX')} vectores nuevos. ` +
     `Quedan ${(restantes ?? 0).toLocaleString('es-MX')} sin vector.`,

@@ -30,13 +30,9 @@ const TTL_VECTORES_MS = 5 * 60 * 1000;
 async function hayVectores(): Promise<boolean> {
   const ahora = Date.now();
   if (cacheVectores && ahora - cacheVectores.cargado_en < TTL_VECTORES_MS) return cacheVectores.hay;
-  const { data, error } = await bd()
-    .from('articulos')
-    .select('id')
-    .not('embedding', 'is', null)
-    .limit(1);
-  // Sin la columna (migración 0006 sin aplicar) no hay búsqueda híbrida:
-  // la RPC tampoco existe y el llamador degrada.
+  const { data, error } = await bd().from('articulos_vectores').select('id').limit(1);
+  // Sin la tabla (migración 0007 sin aplicar) no hay búsqueda híbrida: el
+  // llamador degrada.
   if (error) throw noDisponible(error);
   const hay = (data ?? []).length > 0;
   cacheVectores = { cargado_en: ahora, hay };
@@ -51,7 +47,7 @@ function noDisponible(e: unknown): ErrorBuscar {
     'BUSQUEDA_HIBRIDA_NO_DISPONIBLE',
     'La búsqueda por significado todavía no está instalada en la base.',
     {
-      detalle: `Falta aplicar la migración 0006_busqueda_por_significado.sql (${detalle}).`,
+      detalle: `Falta aplicar la migración 0007_vectores_en_tabla_aparte.sql (${detalle}).`,
       sugerencia: 'Mientras tanto se busca por palabras exactas.',
       causa: e,
     },
@@ -136,7 +132,7 @@ export async function buscarPorSignificado(
     avisos.push({
       codigo: 'VECTORES_PENDIENTES',
       mensaje: 'La búsqueda por significado todavía no está cargada: se buscó solo por palabras exactas.',
-      detalle: 'No hay vectores en `articulos.embedding`. Corre `npm run embeber`.',
+      detalle: 'No hay vectores en `articulos_vectores`. Se cargan con `npm run embeber` (también a diario por GitHub Actions).',
     });
   }
 

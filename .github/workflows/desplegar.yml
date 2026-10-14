@@ -26,12 +26,12 @@ on:
   workflow_dispatch:
     inputs:
       migracion:
-        # La 0006 es idempotente (if not exists / create or replace): volver a
+        # La 0007 es idempotente (if not exists / create or replace): volver a
         # aplicarla no cambia nada, así que va por defecto y nadie tiene que
         # acordarse de escribirla. Para una migración nueva, cambiar aquí.
         description: 'Migración a aplicar (vacío = ninguna)'
         required: false
-        default: '0006_busqueda_por_significado.sql'
+        default: '0007_vectores_en_tabla_aparte.sql'
       desplegar:
         description: 'Desplegar las Edge Functions'
         type: boolean
@@ -61,7 +61,7 @@ env:
 jobs:
   desplegar:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v5
 

@@ -25,7 +25,7 @@ import { redactar } from './redaccion.ts';
 
 const VIGENCIA_MS = 30 * 24 * 60 * 60 * 1000;
 // Cambiar la versión invalida lo guardado (p. ej. al cambiar el prompt).
-const VERSION = 'perfil:v2';
+const VERSION = 'perfil:v3';
 
 function claveDe(f: FiltrosConsulta): string {
   return `${VERSION}:${JSON.stringify({
@@ -120,12 +120,9 @@ export async function conPerfil(
   // 2. Redactarlo.
   try {
     const filas = await muestra(f, res.total);
-    const pregunta = [
-      `Panorama de este conjunto del archivo. Lo que ya se sabe por cálculo: ${frase}`,
-      filas.length < res.total
-        ? `Recibes una muestra de ${filas.length} de los ${res.total} textos, repartida por todo el periodo.`
-        : `Recibes los ${res.total} textos.`,
-    ].join(' ');
+    // Sin decirle que es una muestra: lo repetía en la respuesta ("la muestra
+    // de 240…"), y al editor eso no le sirve. La cifra real va en la frase.
+    const pregunta = `Panorama de este conjunto del archivo. Cifra y periodo reales, ya calculados: ${frase}`;
     const r = await redactar('perfil', pregunta, filas, 12);
     if (r.articulo_ids.length === 0) return sinCambio;
 

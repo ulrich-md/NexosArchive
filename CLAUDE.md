@@ -693,8 +693,10 @@ vectores siguen en Gemini (gratis, 1,000 al día) y nada depende ya de ellos.
 - `llm.ts`: Claude primero; si no hay llave o falla (cupo, red, esquema), la
   misma petición va a Gemini. Router y carriles solo importan de aquí.
 - **Autor + tema ya no busca dentro de la obra: la lee completa.** Si el autor
-  tiene hasta `LECTURA_AUTOR_MAX` (700) textos, el modelo recibe todas sus
-  fichas (título, temas, resumen; ~50k tokens, ~$0.005) y elige. Es lo único
+  tiene hasta `LECTURA_AUTOR_MAX` (1,000) textos, el modelo recibe todas sus
+  fichas (título, temas, resumen) y elige. Mastretta tiene 876, ~70k tokens,
+  menos de un centavo. La primera versión ponía el tope en 700 y Mastretta
+  caía a la búsqueda. Es lo único
   inmune al stemmer y a los vectores pendientes.
 - **Tema sin autor: expansión.** `expandirTema()` pide a Haiku 4–8 palabras
   con que el archivo hablaría del tema («comida» → cocina, gastronomía,

@@ -121,10 +121,11 @@ export const HIBRIDA_CANDIDATOS = entero('HIBRIDA_CANDIDATOS', 40);
 export const HIBRIDA_SIN_REDACCION = 8;
 /**
  * Si la obra de un autor tiene hasta estos textos, el modelo la lee completa
- * en vez de buscar en ella. ~70 tokens por ficha: 700 fichas son ~50k tokens,
- * debajo de los 100k donde Haiku 5.5 cambia de tarifa.
+ * en vez de buscar en ella. Ángeles Mastretta tiene 876 (medido en vivo): a
+ * ~70–90 tokens por ficha son ~60–80k tokens, debajo de los 100k donde Haiku
+ * 5.5 cambia de tarifa. 1,000 es además el tope de filas de PostgREST.
  */
-export const LECTURA_AUTOR_MAX = entero('LECTURA_AUTOR_MAX', 700);
+export const LECTURA_AUTOR_MAX = entero('LECTURA_AUTOR_MAX', 1000);
 /** Máximo de fichas citadas en una respuesta directa. */
 export const HIBRIDA_MAX_CITADAS = 15;
 /**

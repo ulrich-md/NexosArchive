@@ -47,7 +47,8 @@ export async function carrilHibrida(
   // Con autor, si su obra cabe, el modelo la lee COMPLETA (título, temas y
   // resumen de cada texto) en vez de fiarse de una búsqueda: es la única
   // forma de no perder "La cocina de mi abuela" cuando se preguntó por
-  // "comida". Cabe de sobra: ~700 fichas son ~50k tokens, ~$0.005 con Haiku.
+  // "comida". Cabe de sobra: las 876 fichas de Mastretta son ~70k tokens,
+  // menos de un centavo con Haiku.
   let leyoTodo = false;
   if (filtros.autores.length > 0) {
     const t0 = performance.now();

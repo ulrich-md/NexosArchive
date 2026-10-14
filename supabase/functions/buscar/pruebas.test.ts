@@ -479,19 +479,35 @@ Deno.test('validarFiltrosEco acepta el eco de una respuesta y rechaza basura', (
   assertEquals(validarFiltrosEco({ anios_pub: { desde: 1999, hasta: 1990 } })?.anios_pub, null);
 });
 
-Deno.test('quitarTitulosEscritos borra el título que el modelo repitió (caso real)', () => {
-  const crudo = 'Ángeles Mastretta ha abordado el tema de la comida en su texto [id:9154], ' +
-    'que se titula "Duelos y quebrantos" y se relaciona con la alimentación.';
+Deno.test('quitarTitulosEscritos: el título que el modelo escribió se vuelve su cita (casos reales)', () => {
+  const fichas = [
+    { id: 9154, titulo: 'Duelos Y quebrantos' },
+    { id: 80245, titulo: 'La manzana, el Nescafé y la Coca-Cola' },
+    { id: 3, titulo: 'Aforismos' },
+  ];
+  // Fórmula "que se titula" pegada a su marca: se va entera.
   assertEquals(
-    quitarTitulosEscritos(crudo, ['Duelos Y quebrantos']),
-    'Ángeles Mastretta ha abordado el tema de la comida en su texto [id:9154] y se relaciona con la alimentación.',
+    quitarTitulosEscritos('Lo aborda en su texto [id:9154], que se titula "Duelos y quebrantos" y sigue.', fichas),
+    'Lo aborda en su texto [id:9154] y sigue.',
   );
+  // Título suelto, sin marca: se sustituye por la marca, la frase queda entera.
   assertEquals(
-    quitarTitulosEscritos('Lo cuenta en «De domingo a domingo» [id:2].', ['De domingo a domingo']),
-    'Lo cuenta en [id:2].',
+    quitarTitulosEscritos('Evoca recuerdos de infancia con La manzana, el Nescafé y la Coca-Cola.', fichas),
+    'Evoca recuerdos de infancia con [id:80245].',
   );
+  // Título junto a su propia marca: no se duplica.
+  assertEquals(quitarTitulosEscritos('En «Duelos y quebrantos» [id:9154] cuenta…', fichas), 'En [id:9154] cuenta…');
   // Un título corto puede ser una palabra normal: no se toca.
-  assertEquals(quitarTitulosEscritos('Publicó aforismos [id:3].', ['Aforismos']), 'Publicó aforismos [id:3].');
+  assertEquals(quitarTitulosEscritos('Publicó aforismos [id:3].', fichas), 'Publicó aforismos [id:3].');
+});
+
+Deno.test('validarRespuesta cuenta como citado el título sustituido por su marca', () => {
+  const r = validarRespuesta(
+    { texto: 'Evoca su infancia con La manzana, el Nescafé y la Coca-Cola, un texto breve.', articulo_ids: [] },
+    new Set([80245]),
+    { exigirIds: false, maxIds: 10, fichas: [{ id: 80245, titulo: 'La manzana, el Nescafé y la Coca-Cola' }] },
+  );
+  assertEquals(r.articulo_ids, [80245]);
 });
 
 // --- Claude -----------------------------------------------------------------

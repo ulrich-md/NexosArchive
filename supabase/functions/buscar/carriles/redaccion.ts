@@ -125,7 +125,7 @@ export async function redactar(
       validarRespuesta(crudo, idsPermitidos, {
         exigirIds: estilo === 'panorama',
         maxIds,
-        titulos: filas.map((f) => f.titulo),
+        fichas: filas.map((f) => ({ id: Number(f.id), titulo: f.titulo })),
       }),
     onModelo: (m) => { modeloUsado = m; },
   });

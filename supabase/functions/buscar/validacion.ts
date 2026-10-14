@@ -227,29 +227,34 @@ function escaparRegex(s: string): string {
 }
 
 /**
- * El modelo a veces repite el título aunque el prompt se lo prohíbe — visto
- * en producción: «en [id:9154], que se titula "Duelos y quebrantos", …». La
- * marca ya se convierte en el título REAL con su liga; el título escrito por
- * el modelo sobra en el mejor caso y en el peor es una cita inventada (regla
- * 1 de la sección 7). Se borran las fórmulas "que se titula «…»" y cualquier
- * aparición literal de un título de las fichas.
+ * El modelo a veces escribe el título aunque el prompt se lo prohíbe — visto
+ * en producción: «en [id:9154], que se titula "Duelos y quebrantos", …» y
+ * «evoca recuerdos de infancia con La manzana, el Nescafé y la Coca-Cola».
+ * Un título escrito por el modelo es justo lo que la regla 1 de la sección 7
+ * prohíbe, pero borrarlo deja frases truncas ("…de infancia con."). Como se
+ * sabe a qué ficha pertenece cada título, se sustituye por su marca: la
+ * interfaz pone el título REAL con su liga, y la frase queda completa. Si la
+ * marca ya estaba al lado, el duplicado se funde.
  */
-export function quitarTitulosEscritos(texto: string, titulos: string[]): string {
+export function quitarTitulosEscritos(texto: string, fichas: { id: number; titulo: string }[]): string {
   let t = texto.replace(
     /,?\s*(?:que\s+)?(?:se\s+)?(?:titula(?:do|da)?|intitulad[oa]|llamad[oa])\s*[«"“'][^»"”'\n]{2,200}[»"”']/giu,
     '',
   );
-  for (const titulo of titulos) {
+  // Los títulos largos primero: uno puede contener a otro más corto.
+  const ordenadas = [...fichas].sort((x, y) => y.titulo.length - x.titulo.length);
+  for (const { id, titulo } of ordenadas) {
     const limpio = titulo.trim();
     if (limpio.length < 4) continue;
     const e = escaparRegex(limpio);
     // Entre comillas es una cita del título, sin duda.
-    t = t.replace(new RegExp(`[«"“]${e}[»"”]`, 'giu'), '');
+    t = t.replace(new RegExp(`[«"“]${e}[»"”]`, 'giu'), `[id:${id}]`);
     // Sin comillas, solo si no puede ser una palabra normal: "Aforismos" es
     // título de un artículo y también una palabra que el modelo usa.
-    if (limpio.length >= 12 && /\s/.test(limpio)) t = t.replace(new RegExp(e, 'giu'), '');
+    if (limpio.length >= 12 && /\s/.test(limpio)) t = t.replace(new RegExp(e, 'giu'), `[id:${id}]`);
   }
   return t
+    .replace(/\[id:(\d+)\](?:\s*[,;:]?\s*\[id:\1\])+/g, '[id:$1]')
     .replace(/[ \t]+([,.;:])/g, '$1')
     .replace(/,\s*,/g, ',')
     .replace(/[ \t]{2,}/g, ' ')
@@ -260,12 +265,14 @@ export function quitarTitulosEscritos(texto: string, titulos: string[]): string 
 export function validarRespuesta(
   crudo: unknown,
   idsPermitidos: Set<number>,
-  op: { exigirIds: boolean; maxIds: number; titulos?: string[] },
+  op: { exigirIds: boolean; maxIds: number; fichas?: { id: number; titulo: string }[] },
 ): RespuestaCruda {
   if (!esObjeto(crudo)) throw invalido('La respuesta no es un objeto.');
 
   let texto = sanearParrafos(crudo.texto, 3_500);
   if (contieneLiga(texto)) throw invalido('La respuesta trae una liga: el modelo no escribe URLs.');
+  // Antes de leer las marcas: un título sustituido por su marca cuenta como cita.
+  if (op.fichas && op.fichas.length > 0) texto = quitarTitulosEscritos(texto, op.fichas);
 
   const citados: number[] = [];
   texto = texto.replace(MARCA, (_m, n: string) => {
@@ -276,7 +283,6 @@ export function validarRespuesta(
   })
     .replace(/[ \t]+([,.;:])/g, '$1')
     .replace(/[ \t]{2,}/g, ' ');
-  if (op.titulos && op.titulos.length > 0) texto = quitarTitulosEscritos(texto, op.titulos);
 
   if (texto.replace(MARCA, '').trim().length < 20) {
     throw invalido('La respuesta viene vacía o es demasiado corta.');

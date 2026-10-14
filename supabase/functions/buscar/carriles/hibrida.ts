@@ -57,12 +57,25 @@ export async function carrilHibrida(
       { limite: LECTURA_AUTOR_MAX },
     );
     if (obra.total > 0 && obra.total <= LECTURA_AUTOR_MAX) {
-      candidatos = obra.filas;
       leyoTodo = true;
+      // Con cientos de fichas, el modelo atiende más a las primeras: medido
+      // con Mastretta (876), "La cocina de Marichu" quedaba fuera aunque su
+      // título nombra el tema. Se ordena la obra: primero lo que coincide con
+      // el tema ampliado (por significado y por palabras), luego el resto.
+      // Nada se quita: el modelo sigue leyendo la obra completa.
+      const busqueda = await buscarPorSignificado(filtros, 100, { expandir: true });
+      avisos.push(...busqueda.avisos.filter((a) => a.codigo !== 'VECTORES_PENDIENTES'));
+      pasos.push(...busqueda.pasosPrevios);
+      const primero = new Set(busqueda.candidatos.map((c) => Number(c.id)));
+      candidatos = [
+        ...busqueda.candidatos,
+        ...obra.filas.filter((f) => !primero.has(Number(f.id))),
+      ];
       pasos.push({
         paso: 'sql',
         titulo: `Reunió toda la obra de ${filtros.autores.join(', ')}`,
-        detalle: `${obra.total} textos${filtros.rango_pub ? ` publicados entre ${filtros.rango_pub.desde} y ${filtros.rango_pub.hasta}` : ''} · el modelo los lee todos`,
+        detalle: `${obra.total} textos${filtros.rango_pub ? ` publicados entre ${filtros.rango_pub.desde} y ${filtros.rango_pub.hasta}` : ''} · ` +
+          `${primero.size} coinciden con el tema y van primero · el modelo los lee todos`,
         ms: Math.round(performance.now() - t0),
       });
     }

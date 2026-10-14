@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Aviso de privacidad — Archivo Nexos</title>
+    <meta name="description" content="Qué datos guarda el Archivo Nexos, para qué y cómo borrarlos." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap"
+    />
+    <!--
+      Página estática, fuera de la app de React: Google la pide (junto con la
+      página principal) para publicar la pantalla de consentimiento del
+      inicio de sesión. Describe lo que el código hace hoy; si cambia lo que se
+      guarda (migraciones, Edge Functions), esta página cambia con él.
+    -->
+    <style>
+      :root {
+        --background: #f6f8f9;
+        --surface: #ffffff;
+        --foreground: #0c1a20;
+        --muted-foreground: #3b4e56;
+        --border: #dce4e7;
+        --primary: #018fbd;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: #0b1418;
+          --surface: #111e23;
+          --foreground: #e6eef1;
+          --muted-foreground: #94a8b1;
+          --border: #22343b;
+          --primary: #3cb6dc;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--background);
+        color: var(--foreground);
+        font: 16px/1.65 'IBM Plex Sans', system-ui, sans-serif;
+      }
+      main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+      header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+      header img { width: 40px; height: 40px; border-radius: 3px; }
+      header a { color: inherit; text-decoration: none; }
+      h1 { font: 400 38px/1.15 'Newsreader', Georgia, serif; margin: 0 0 8px; }
+      h2 { font: 500 22px/1.3 'Newsreader', Georgia, serif; margin: 36px 0 8px; }
+      p, li { color: var(--foreground); }
+      ul { padding-left: 20px; }
+      li { margin: 6px 0; }
+      a { color: var(--primary); }
+      .meta {
+        font: 13px/1.5 'IBM Plex Mono', ui-monospace, monospace;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+      }
+      footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a href="/"><img src="/logo-nexos-blue.jpeg" alt="nexos" /></a>
+        <span class="meta">Archivo Nexos</span>
+      </header>
+
+      <h1>Aviso de privacidad</h1>
+      <p class="meta">Última actualización: 14 de octubre de 2026</p>
+
+      <p>
+        El Archivo Nexos (<a href="https://www.archivonexos.online">archivonexos.online</a>) es una
+        herramienta interna para consultar el archivo de la revista <em>Nexos</em>. Esta página dice
+        qué datos guarda, para qué los usa y cómo borrarlos.
+      </p>
+
+      <h2>Sin iniciar sesión</h2>
+      <ul>
+        <li>
+          Tus conversaciones se guardan solo en tu navegador (almacenamiento local) y se borran
+          solas a los 7 días. No salen de tu equipo salvo como se explica abajo.
+        </li>
+        <li>
+          Cada pregunta que haces se registra en nuestra base de datos junto con tu dirección IP,
+          el tipo de búsqueda, cuántos resultados hubo y cuánto tardó. Lo usamos para aplicar el
+          límite de consultas por hora y para mejorar las búsquedas que fallan.
+        </li>
+      </ul>
+
+      <h2>Si inicias sesión con Google</h2>
+      <ul>
+        <li>
+          Google nos comparte tu nombre, tu correo electrónico y tu foto de perfil. Solo los usamos
+          para identificar tu cuenta y mostrarte quién tiene la sesión abierta. No pedimos acceso a
+          tu correo, tus archivos ni a ningún otro servicio de Google.
+        </li>
+        <li>
+          Tus conversaciones (tus preguntas, las respuestas y las fichas de los artículos que se te
+          mostraron) se guardan en tu cuenta para que las veas desde cualquier dispositivo. Se
+          conservan las 200 más recientes; las anteriores se borran solas.
+        </li>
+        <li>
+          El registro de preguntas descrito arriba se asocia a tu cuenta en lugar de a tu IP.
+        </li>
+      </ul>
+
+      <h2>Quién procesa los datos</h2>
+      <ul>
+        <li><strong>Supabase</strong> aloja la base de datos y el inicio de sesión.</li>
+        <li>
+          <strong>Anthropic</strong> (Claude) y <strong>Google</strong> (Gemini) reciben el texto de
+          tu pregunta, junto con fichas del archivo, para entenderla y redactar la respuesta. No les
+          enviamos tu nombre, tu correo ni tu IP.
+        </li>
+        <li>
+          <strong>Vercel</strong> sirve el sitio y lleva estadísticas de visitas agregadas, sin
+          cookies.
+        </li>
+      </ul>
+      <p>No vendemos ni compartimos tus datos con nadie más, ni los usamos para publicidad.</p>
+
+      <h2>Cómo borrar tus datos</h2>
+      <ul>
+        <li>
+          Cada conversación se puede borrar desde la barra lateral, con el icono del bote de basura.
+          Con sesión, se borra de nuestra base de datos en ese momento.
+        </li>
+        <li>
+          Para borrar tu cuenta y todo lo asociado a ella, pídelo a la administración del Archivo
+          Nexos. Al borrar la cuenta se eliminan también todas sus conversaciones.
+        </li>
+        <li>
+          Puedes retirar el acceso del Archivo Nexos a tu cuenta de Google cuando quieras en
+          <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.
+        </li>
+      </ul>
+
+      <footer>
+        <p class="meta"><a href="/">Volver al archivo</a></p>
+      </footer>
+    </main>
+  </body>
+</html>

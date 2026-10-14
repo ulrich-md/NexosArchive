@@ -426,6 +426,9 @@ export function BarraLateral({
           nexos.com.mx
           <ExternalLink className="h-3 w-3" strokeWidth={1.75} aria-hidden />
         </a>
+        <a href="/privacidad.html" className="mono-meta text-muted-foreground hover:text-primary">
+          Privacidad
+        </a>
       </div>
     </aside>
   );

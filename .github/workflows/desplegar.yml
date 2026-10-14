@@ -10,10 +10,12 @@
 #   - A mano (Actions → "Desplegar archivo" → Run workflow): todo lo anterior.
 #   - En cada push a la rama por defecto que toque supabase/functions: solo
 #     despliega. Así "subir el código" y "que esté vivo" son lo mismo.
-#   - Cada 6 horas: solo carga vectores pendientes. El plan gratuito de
-#     Gemini permite 1,000 embeddings AL DÍA (medido): sin facturación la
-#     carga completa tarda semanas; esto la retoma sola, y también rehace los
-#     vectores que un re-enriquecimiento haya vaciado.
+#   - Una vez al día: solo carga vectores pendientes. El plan gratuito de
+#     Gemini permite 1,000 embeddings AL DÍA (medido), y ese cupo es el MISMO
+#     que usan las preguntas en vivo para buscar por significado. Por eso la
+#     carga se detiene en 850 y deja 150 para el buscador: medido el
+#     2026-10-14, con la carga gastando los 1,000, todas las preguntas del día
+#     avisaban "la búsqueda por significado no respondió".
 #
 # Secretos del repo (Settings → Secrets and variables → Actions):
 #   SUPABASE_ACCESS_TOKEN  token personal de supabase.com/dashboard/account/tokens
@@ -47,9 +49,10 @@ on:
     branches: [claude/nueva-sesion-ituzea]
     paths: ['supabase/functions/**']
   schedule:
-    # Cada 6 horas: si el cupo de embeddings ya se agotó, la corrida termina
-    # en segundos; si se liberó (o ya hay facturación), sigue cargando.
-    - cron: '17 */6 * * *'
+    # 09:17 UTC (03:17 en la Ciudad de México): después de que Google reinicia
+    # el cupo diario (medianoche del Pacífico) y antes de que la redacción
+    # empiece a buscar.
+    - cron: '17 9 * * *'
 
 permissions:
   contents: read
@@ -211,5 +214,6 @@ jobs:
           echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"
           export SUPABASE_SERVICE_ROLE_KEY
           npm ci --no-audit --no-fund
-          npm run embeber
+          # 850, no 1,000: el resto del cupo diario es para las preguntas en vivo.
+          npm run embeber -- --limite=850
 

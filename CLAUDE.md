@@ -889,6 +889,24 @@ están en la página visible. Cuidado de créditos del dueño:
 Las respuestas de `hibrida` también se alargaron (3–5 párrafos, el primero un
 panorama sin citas), a pedido.
 
+### Revisión en vivo del 2026-10-14 (mañana)
+
+- **"¿Qué se ha escrito sobre el 68?" llegaba sin ningún filtro.** "68" no se
+  leía como año y, peor, `aniosMencionados` descarta todo lo anterior a 1978
+  (fundación de la revista): "1968" tampoco pasaba. Eso es correcto para
+  `anio_pub`, pero no para `anios_referidos`, que son los años de los que
+  HABLA el texto. `rangoReferido()` (texto.ts) acepta 1800 en adelante y el año
+  corto mexicano ("el 68", "del 94", nunca "el 10 de octubre" ni "el 30 por
+  ciento"); panorama lo usa. Y un panorama sin ningún filtro ya no manda 400
+  fichas al azar al modelo: pide precisar, sin gastar.
+- **La carga de vectores se comía el cupo de las preguntas en vivo.** El cupo
+  gratuito de embeddings (1,000/día) es uno solo: la carga lo agotaba a las
+  6 a. m. y todo el día las preguntas avisaban "la búsqueda por significado no
+  respondió". Ahora corre una vez al día y se detiene en 850.
+- **La prueba en vivo del workflow gastaba créditos de Claude** (leía la obra
+  completa de Mastretta en cada despliegue; 16 despliegues en un día fueron
+  casi todo el gasto). Ahora solo usa preguntas que no llaman al modelo.
+
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.
 ---

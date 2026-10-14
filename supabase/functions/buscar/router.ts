@@ -24,6 +24,7 @@ import {
   expandirRango,
   normalizar,
   rangoPublicacion,
+  rangoReferido,
   temaResidual,
   tokens,
   type RangoAnios,
@@ -287,7 +288,10 @@ export function decidirHeuristica(
 
   // (d) "¿Qué se ha escrito sobre X?" es panorama por definición.
   if (PATRON_PANORAMA.test(texto)) {
-    const anios = rango ? expandirRango(rango) : [];
+    // Los años de un panorama son de los que HABLA el texto: pueden ser
+    // anteriores a la revista ("el 68", "1910").
+    const referido = rangoReferido(texto) ?? rango;
+    const anios = referido ? expandirRango(referido) : [];
     return {
       modo: 'panorama',
       autores,
@@ -297,7 +301,7 @@ export function decidirHeuristica(
       rango_pub: null,
       anios_referidos: anios,
       temas: residual ? residual.split(' ').slice(0, 6) : [],
-      texto: residual || (rango ? String(rango.desde) : null),
+      texto: residual || (referido ? String(referido.desde) : null),
       origen: 'heuristica',
       razon: 'La pregunta pide una visión de conjunto del archivo.',
       avisos: avisosDeAmbiguedad(autores),
@@ -488,7 +492,8 @@ export async function filtrosParaModoExplicito(
   modo: Modo,
 ): Promise<Clasificacion> {
   const { autores, rango, residual } = await filtrosDeterministas(pregunta);
-  const anios = modo === 'panorama' && rango ? expandirRango(rango) : [];
+  const referido = modo === 'panorama' ? (rangoReferido(pregunta) ?? rango) : null;
+  const anios = referido ? expandirRango(referido) : [];
   return {
     modo,
     autores,

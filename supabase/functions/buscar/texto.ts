@@ -77,6 +77,54 @@ export function aniosMencionados(pregunta: string): number[] {
   return [...encontrados].sort((a, b) => a - b);
 }
 
+const MESES = 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre';
+
+/**
+ * "El 68", "del 85", "año 94": el año con dos cifras, como se dice en México.
+ * Solo tras un artículo o "año", y nunca si sigue un mes ("el 10 de octubre"),
+ * un porcentaje o una cantidad ("el 30 por ciento", "el 20 mil").
+ */
+const PATRON_ANIO_CORTO = new RegExp(
+  `\\b(?:el|del|al|ano|anos|generacion del|movimiento del)\\s+(\\d{2})\\b` +
+    `(?!\\s+(?:de\\s+(?:${MESES})|por ciento|porciento|mil|millones|anos|textos|articulos|paginas|veces|personas))`,
+  'g',
+);
+
+/**
+ * Años de los que HABLA un texto (`anios_referidos`), no de cuándo se publicó.
+ * A diferencia de `aniosMencionados`, no empiezan en 1978: "¿qué se ha escrito
+ * sobre el 68?" pregunta por 1968, y Nexos lo ha tratado muchas veces. Medido
+ * (2026-10-14): "el 68" no se reconocía y la pregunta llegaba sin ningún
+ * filtro; el modelo recibía 400 fichas al azar y respondía con textos que "no
+ * son sobre el 68".
+ */
+export function aniosReferidosMencionados(pregunta: string): number[] {
+  const encontrados = new Set<number>();
+  for (const m of pregunta.matchAll(/\b(1[89]\d{2}|20\d{2})\b/g)) {
+    const n = Number.parseInt(m[1], 10);
+    if (n >= 1800 && n <= ANIO_MAX) encontrados.add(n);
+  }
+  const corte = ANIO_MAX % 100;
+  for (const m of normalizar(pregunta).matchAll(PATRON_ANIO_CORTO)) {
+    const nn = Number.parseInt(m[1], 10);
+    encontrados.add(nn > corte ? 1900 + nn : 2000 + nn);
+  }
+  return [...encontrados].sort((a, b) => a - b);
+}
+
+/** Como `rangoPublicacion`, pero con los años de los que trata el texto. */
+export function rangoReferido(pregunta: string): RangoAnios | null {
+  const candidatos: RangoAnios[] = [
+    ...decadasMencionadas(pregunta),
+    ...aniosReferidosMencionados(pregunta).map((a) => ({ desde: a, hasta: a })),
+  ];
+  if (candidatos.length === 0) return null;
+  return {
+    desde: Math.min(...candidatos.map((c) => c.desde)),
+    hasta: Math.max(...candidatos.map((c) => c.hasta)),
+  };
+}
+
 /**
  * Décadas escritas con palabras ("los noventa", "años 80").
  * Se evalúan sobre el texto normalizado (sin acentos), por eso los patrones
@@ -129,6 +177,7 @@ export function temaResidual(pregunta: string, autores: string[]): string {
     for (const tk of tokens(autor)) t = t.replaceAll(tk, ' ');
   }
   t = t.replace(/\b(1[89]\d{2}|20\d{2})\b/g, ' ');
+  t = t.replace(PATRON_ANIO_CORTO, ' ');
   for (const d of DECADAS) t = t.replace(d.patron, ' ');
   const palabras = t.split(/\s+/).filter((p) => p.length > 2 && !esVacia(p));
   return palabras.join(' ').trim();

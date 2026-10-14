@@ -22,6 +22,7 @@ import {
   escaparParaPrompt,
   normalizar,
   rangoPublicacion,
+  rangoReferido,
   sanearTextoModelo,
   temaResidual,
 } from './texto.ts';
@@ -542,4 +543,15 @@ Deno.test('validarExpansion: palabras útiles, sin repetir el tema ni colar cifr
     ['cocina', 'gastronomía', 'mole'],
   );
   assertEquals(validarExpansion(null, 'comida'), []);
+});
+
+Deno.test('rangoReferido: "el 68" es 1968 y los años anteriores a la revista cuentan', () => {
+  assertEquals(rangoReferido('¿Qué se ha escrito sobre el 68?'), { desde: 1968, hasta: 1968 });
+  assertEquals(rangoReferido('¿Qué se ha escrito sobre 1968?'), { desde: 1968, hasta: 1968 });
+  assertEquals(rangoReferido('lo que se dijo del 94'), { desde: 1994, hasta: 1994 });
+  assertEquals(rangoReferido('qué pasó el 06'), { desde: 2006, hasta: 2006 });
+  assertEquals(rangoReferido('artículos del 10 de octubre'), null);
+  assertEquals(rangoReferido('subió el 30 por ciento'), null);
+  // Los años de publicación siguen empezando con la revista.
+  assertEquals(rangoPublicacion('¿Qué se ha escrito sobre 1968?'), null);
 });

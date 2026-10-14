@@ -22,6 +22,7 @@ import {
   aproximar,
   buscarArticulos,
   describirFiltros,
+  hayFiltros,
   type FiltrosConsulta,
   type ResultadoCarril,
 } from './comun.ts';
@@ -243,6 +244,40 @@ export async function carrilPanorama(
   avisosPrevios: Aviso[] = [],
 ): Promise<ResultadoCarril> {
   const avisos = [...avisosPrevios];
+
+  // Sin tema, autor ni años no hay de qué hacer un panorama: lo que llegaría
+  // al modelo serían 400 fichas cualesquiera del archivo, y su respuesta,
+  // ruido pagado. Se dice y se pide precisar, sin gastar el modelo. Va como
+  // `conversacion` para que la interfaz lo pinte como texto y no como "el
+  // archivo está vacío" (total 0 sin resultados).
+  if (!hayFiltros(filtros)) {
+    return {
+      modo: 'conversacion',
+      fichas: [],
+      total: 0,
+      pagina: 1,
+      por_pagina: 0,
+      aproximados: false,
+      reformulacion: null,
+      sintesis: {
+        texto: 'No alcancé a distinguir de qué tema, persona o época quieres el panorama. ' +
+          'Prueba con algo como «¿Qué se ha escrito sobre el movimiento estudiantil de 1968?» o ' +
+          '«¿Qué ha escrito Carlos Monsiváis sobre el cine?».',
+        temas: [],
+        fichas_consideradas: 0,
+        modelo: 'calculado',
+      },
+      filtros,
+      avisos,
+      pasos: [{
+        paso: 'router',
+        titulo: 'La pregunta no trae un tema reconocible',
+        detalle: 'Sin tema, autor ni años: no se consultó el modelo.',
+        ms: 0,
+      }],
+    };
+  }
+
   const rec = await recolectar(filtros);
   avisos.push(...rec.avisos);
   const pasos = [...rec.pasos];

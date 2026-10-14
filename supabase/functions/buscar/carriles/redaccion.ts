@@ -120,7 +120,12 @@ export async function redactar(
       description: 'Redacta la respuesta citando fichas por id. Nunca títulos, fechas ni ligas.',
       input_schema: ESQUEMA_RESPUESTA as unknown as Record<string, unknown>,
     },
-    validar: (crudo) => validarRespuesta(crudo, idsPermitidos, { exigirIds: estilo === 'panorama', maxIds }),
+    validar: (crudo) =>
+      validarRespuesta(crudo, idsPermitidos, {
+        exigirIds: estilo === 'panorama',
+        maxIds,
+        titulos: filas.map((f) => f.titulo),
+      }),
     onModelo: (m) => { modeloUsado = m; },
   });
 

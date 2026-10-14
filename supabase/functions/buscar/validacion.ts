@@ -222,10 +222,45 @@ const MARCA = /\[\s*id\s*[:=]?\s*(\d+)\s*\]/gi;
  * Los ids citados en el texto cuentan como pertinentes aunque el modelo haya
  * olvidado listarlos: una cita sin ficha sería una cita rota.
  */
+function escaparRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * El modelo a veces repite el título aunque el prompt se lo prohíbe — visto
+ * en producción: «en [id:9154], que se titula "Duelos y quebrantos", …». La
+ * marca ya se convierte en el título REAL con su liga; el título escrito por
+ * el modelo sobra en el mejor caso y en el peor es una cita inventada (regla
+ * 1 de la sección 7). Se borran las fórmulas "que se titula «…»" y cualquier
+ * aparición literal de un título de las fichas.
+ */
+export function quitarTitulosEscritos(texto: string, titulos: string[]): string {
+  let t = texto.replace(
+    /,?\s*(?:que\s+)?(?:se\s+)?(?:titula(?:do|da)?|intitulad[oa]|llamad[oa])\s*[«"“'][^»"”'\n]{2,200}[»"”']/giu,
+    '',
+  );
+  for (const titulo of titulos) {
+    const limpio = titulo.trim();
+    if (limpio.length < 4) continue;
+    const e = escaparRegex(limpio);
+    // Entre comillas es una cita del título, sin duda.
+    t = t.replace(new RegExp(`[«"“]${e}[»"”]`, 'giu'), '');
+    // Sin comillas, solo si no puede ser una palabra normal: "Aforismos" es
+    // título de un artículo y también una palabra que el modelo usa.
+    if (limpio.length >= 12 && /\s/.test(limpio)) t = t.replace(new RegExp(e, 'giu'), '');
+  }
+  return t
+    .replace(/[ \t]+([,.;:])/g, '$1')
+    .replace(/,\s*,/g, ',')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .trim();
+}
+
 export function validarRespuesta(
   crudo: unknown,
   idsPermitidos: Set<number>,
-  op: { exigirIds: boolean; maxIds: number },
+  op: { exigirIds: boolean; maxIds: number; titulos?: string[] },
 ): RespuestaCruda {
   if (!esObjeto(crudo)) throw invalido('La respuesta no es un objeto.');
 
@@ -241,6 +276,7 @@ export function validarRespuesta(
   })
     .replace(/[ \t]+([,.;:])/g, '$1')
     .replace(/[ \t]{2,}/g, ' ');
+  if (op.titulos && op.titulos.length > 0) texto = quitarTitulosEscritos(texto, op.titulos);
 
   if (texto.replace(MARCA, '').trim().length < 20) {
     throw invalido('La respuesta viene vacía o es demasiado corta.');

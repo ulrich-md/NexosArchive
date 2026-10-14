@@ -26,7 +26,7 @@ import {
   temaResidual,
 } from './texto.ts';
 import { armarFicha, idsValidos, SIN_AUTOR } from './fichas.ts';
-import { validarClasificacion, validarFiltrosEco, validarRespuesta } from './validacion.ts';
+import { quitarTitulosEscritos, validarClasificacion, validarFiltrosEco, validarRespuesta } from './validacion.ts';
 import { detectarCharla, quitarCortesia, sanearParrafos } from './texto.ts';
 import { fraseCatalogo } from './carriles/catalogo.ts';
 import { literalArreglo } from './carriles/comun.ts';
@@ -475,4 +475,19 @@ Deno.test('validarFiltrosEco acepta el eco de una respuesta y rechaza basura', (
   });
   assertEquals(validarFiltrosEco('nada'), null);
   assertEquals(validarFiltrosEco({ anios_pub: { desde: 1999, hasta: 1990 } })?.anios_pub, null);
+});
+
+Deno.test('quitarTitulosEscritos borra el título que el modelo repitió (caso real)', () => {
+  const crudo = 'Ángeles Mastretta ha abordado el tema de la comida en su texto [id:9154], ' +
+    'que se titula "Duelos y quebrantos" y se relaciona con la alimentación.';
+  assertEquals(
+    quitarTitulosEscritos(crudo, ['Duelos Y quebrantos']),
+    'Ángeles Mastretta ha abordado el tema de la comida en su texto [id:9154] y se relaciona con la alimentación.',
+  );
+  assertEquals(
+    quitarTitulosEscritos('Lo cuenta en «De domingo a domingo» [id:2].', ['De domingo a domingo']),
+    'Lo cuenta en [id:2].',
+  );
+  // Un título corto puede ser una palabra normal: no se toca.
+  assertEquals(quitarTitulosEscritos('Publicó aforismos [id:3].', ['Aforismos']), 'Publicó aforismos [id:3].');
 });

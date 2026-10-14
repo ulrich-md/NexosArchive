@@ -46,10 +46,6 @@ on:
   schedule:
     - cron: '17 9 * * *'
 
-concurrency:
-  group: desplegar-archivo
-  cancel-in-progress: false
-
 permissions:
   contents: read
 
@@ -59,9 +55,16 @@ env:
   SUPABASE_URL: https://tedudsobbqjmgulzksmw.supabase.co
 
 jobs:
+  # Desplegar y cargar vectores van en jobs con filas separadas: la carga
+  # tarda horas (cuota gratuita, ~100 textos por minuto) y un push no puede
+  # esperar a que termine para desplegarse.
   desplegar:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 20
+    concurrency:
+      group: archivo-despliegue
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
 
@@ -115,14 +118,46 @@ jobs:
           supabase functions deploy buscar --project-ref "$PROJECT_REF" --no-verify-jwt
           supabase functions deploy facetas --project-ref "$PROJECT_REF" --no-verify-jwt
 
+      - name: Probar en vivo
+        if: github.event_name != 'schedule'
+        run: |
+          llave=$(grep '^VITE_SUPABASE_ANON_KEY=' web/.env | cut -d= -f2-)
+          for pregunta in 'Hola' 'Que ha escrito angeles mastretta sobre comida'; do
+            echo "=== $pregunta"
+            jq -n --arg p "$pregunta" '{pregunta: $p}' > /tmp/pregunta.json
+            curl -sS -m 60 -X POST "$SUPABASE_URL/functions/v1/buscar" \
+              -H "content-type: application/json" -H "apikey: $llave" -H "Authorization: Bearer $llave" \
+              --data @/tmp/pregunta.json \
+            | jq -r '"modo: \(.modo) · total: \(.total) · \(.ms) ms",
+                     (.traza[]? | "  paso: \(.titulo) | \(.detalle)"),
+                     (.avisos[]? | "  aviso: \(.mensaje)"),
+                     "  respuesta: \((.sintesis.texto // "") | .[0:400])",
+                     (.resultados[:5][]? | "  - \(.titulo) · \(.fecha_pub)"),
+                     (.error // empty | "  ERROR: \(.)")'
+          done
+
+  vectores:
+    # Después del despliegue (la migración tiene que existir antes), o solo,
+    # en la corrida diaria.
+    needs: desplegar
+    if: >-
+      always() &&
+      (needs.desplegar.result == 'success' || needs.desplegar.result == 'skipped') &&
+      (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.embeber))
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    concurrency:
+      group: archivo-vectores
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
       - uses: actions/setup-node@v5
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.embeber)
         with:
           node-version: 22
           cache: npm
 
       - name: Cargar vectores pendientes
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.embeber)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -144,20 +179,3 @@ jobs:
           npm ci --no-audit --no-fund
           npm run embeber
 
-      - name: Probar en vivo
-        if: github.event_name != 'schedule'
-        run: |
-          llave=$(grep '^VITE_SUPABASE_ANON_KEY=' web/.env | cut -d= -f2-)
-          for pregunta in 'Hola' 'Que ha escrito angeles mastretta sobre comida'; do
-            echo "=== $pregunta"
-            jq -n --arg p "$pregunta" '{pregunta: $p}' > /tmp/pregunta.json
-            curl -sS -m 60 -X POST "$SUPABASE_URL/functions/v1/buscar" \
-              -H "content-type: application/json" -H "apikey: $llave" -H "Authorization: Bearer $llave" \
-              --data @/tmp/pregunta.json \
-            | jq -r '"modo: \(.modo) · total: \(.total) · \(.ms) ms",
-                     (.traza[]? | "  paso: \(.titulo) | \(.detalle)"),
-                     (.avisos[]? | "  aviso: \(.mensaje)"),
-                     "  respuesta: \((.sintesis.texto // "") | .[0:400])",
-                     (.resultados[:5][]? | "  - \(.titulo) · \(.fecha_pub)"),
-                     (.error // empty | "  ERROR: \(.)")'
-          done

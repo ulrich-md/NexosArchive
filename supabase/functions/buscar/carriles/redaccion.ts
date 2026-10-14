@@ -14,7 +14,7 @@ import { escaparParaPrompt } from '../texto.ts';
 import { ESQUEMA_RESPUESTA, validarRespuesta } from '../validacion.ts';
 import type { FilaArticulo } from '../tipos.ts';
 
-export type Estilo = 'panorama' | 'directa';
+export type Estilo = 'panorama' | 'directa' | 'perfil';
 
 const COMUNES = [
   'Eres el redactor del buscador interno del archivo de la revista mexicana Nexos (1978-2026).',
@@ -38,6 +38,22 @@ const COMUNES = [
 ];
 
 const SISTEMA: Record<Estilo, string> = {
+  perfil: [
+    ...COMUNES,
+    '',
+    'Tarea: dar un panorama de un conjunto de textos del archivo (la obra de una persona, una',
+    'sección o una época). La pregunta trae la cifra y el periodo ya calculados: úsalos tal cual.',
+    '- Habla del REGISTRO DEL ARCHIVO, nunca de la vida de nadie: qué hay aquí, no quién es.',
+    '  Un hueco de años en el archivo no es un silencio de la persona: no lo interpretes.',
+    '- Primer párrafo: la cifra, el periodo y de qué trata el conjunto en general.',
+    '- Luego de dos a cuatro párrafos: los temas recurrentes (concretos, nunca "otros" ni',
+    '  "varios"), cómo cambian con los años y qué géneros o tipos de texto hay. Cita en total',
+    '  de 5 a 10 textos representativos con [id:N], repartidos entre temas y épocas.',
+    '- Si recibiste una muestra, no digas cifras por tema: di "recurre", "abunda", "aparece".',
+    '- En articulo_ids pon todos los que citaste.',
+    '',
+    'Responde siempre llamando a la herramienta redactar_respuesta.',
+  ].join('\n'),
   panorama: [
     ...COMUNES,
     '',
@@ -61,9 +77,11 @@ const SISTEMA: Record<Estilo, string> = {
     '  que no tiene relación o lo menciona de pasada.',
     '- Prefiere incluir de más que de menos: quien decide es el editor, y tu trabajo es no',
     '  dejar fuera nada que le sirva.',
-    '- Escribe de uno a tres párrafos. Empieza por los textos que tratan el tema de lleno y',
-    '  sigue con los que lo tocan de forma secundaria, diciéndolo así. Di desde qué ángulos lo',
-    '  aborda el archivo. Cita cada texto que menciones con [id:N].',
+    '- Escribe de tres a cinco párrafos. El primero es un panorama: cómo trata el archivo el',
+    '  tema, desde qué ángulos, en qué épocas y con qué tono, sin citar todavía. Luego, los',
+    '  textos que tratan el tema de lleno y después los que lo tocan de forma secundaria,',
+    '  diciéndolo así; agrúpalos por ángulo y di qué aporta cada uno según su ficha. Cita cada',
+    '  texto que menciones con [id:N].',
     '- Si encontraste textos pertinentes, no digas que el archivo "no tiene" textos del tema',
     '  aunque ninguno sea central.',
     '- No des consejos al editor sobre cómo buscar ni le pidas revisar fichas.',
@@ -135,7 +153,7 @@ export async function redactar(
     },
     validar: (crudo) =>
       validarRespuesta(crudo, idsPermitidos, {
-        exigirIds: estilo === 'panorama',
+        exigirIds: estilo !== 'directa',
         maxIds,
         fichas: filas.map((f) => ({ id: Number(f.id), titulo: f.titulo })),
       }),

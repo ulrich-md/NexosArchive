@@ -30,6 +30,7 @@ import { clasificar, clasificarHeuristica, filtrosParaModoExplicito, reformularS
 import { detectaSeguimiento, detectarCharla, quitarCortesia } from './texto.ts';
 import { responderCharla } from './charla.ts';
 import { validarFiltrosEco } from './validacion.ts';
+import { conPerfil } from './carriles/perfil.ts';
 import { carrilCatalogo, normalizarPaginacion } from './carriles/catalogo.ts';
 import { carrilPanorama } from './carriles/panorama.ts';
 import { carrilHibrida } from './carriles/hibrida.ts';
@@ -305,6 +306,14 @@ async function manejar(
     }
   }
 
+  // Una lista de catálogo abre con un panorama redactado (guardado 30 días).
+  let usoModeloEnCatalogo = false;
+  if (resultado.modo === 'catalogo') {
+    const p = await conPerfil(resultado, verificarLimiteUnaVez);
+    resultado = p.resultado;
+    usoModeloEnCatalogo = p.usoModelo;
+  }
+
   traza.push(...resultado.pasos);
 
   // --- Archivo vacío: estado honesto, nunca datos de ejemplo ----------------
@@ -325,7 +334,7 @@ async function manejar(
     usuario: sesion.usuario_id,
     ip,
     pregunta: preguntaEfectiva,
-    modo: resultado.modo,
+    modo: usoModeloEnCatalogo ? 'catalogo_resumen' : resultado.modo,
     n_resultados: resultado.fichas.length,
     ms,
   });
@@ -355,6 +364,7 @@ function armarRespuesta(
     filtros: aFiltrosAplicados(resultado.filtros),
     sintesis: resultado.sintesis,
     resultados: resultado.fichas,
+    citadas: resultado.citadas ?? [],
     total: resultado.total,
     pagina: resultado.pagina,
     por_pagina: resultado.por_pagina,

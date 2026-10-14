@@ -55,7 +55,9 @@ interface RegistroConsulta {
   usuario: string | null;
   ip: string | null;
   pregunta: string;
-  modo: Modo;
+  /** `catalogo_resumen`: lista de catálogo cuyo panorama redactó el modelo;
+   *  a diferencia de `catalogo`, cuenta para el límite por hora. */
+  modo: Modo | 'catalogo_resumen';
   n_resultados: number;
   ms: number;
 }

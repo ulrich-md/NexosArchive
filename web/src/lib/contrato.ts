@@ -100,6 +100,9 @@ export interface RespuestaBuscar {
    */
   respuesta: string | null;
   articulos: Articulo[];
+  /** Artículos citados en `respuesta` que no están en `articulos` (el panorama
+   *  de una lista cita textos de toda la obra, no solo de la página). */
+  citadas: Articulo[];
   /** Total de coincidencias en la base, no la longitud de `articulos`. */
   total: number;
   pagina: number;

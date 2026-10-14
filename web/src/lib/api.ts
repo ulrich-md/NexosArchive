@@ -195,26 +195,30 @@ function validarBuscar(crudo: unknown): RespuestaBuscar {
 
   // Se descarta cualquier artículo sin los campos con los que se arma la
   // ficha: preferimos mostrar de menos que mostrar una ficha a medias.
-  const articulos = (d.articulos ?? []).filter(
-    (a) =>
-      a &&
-      typeof a.id === 'number' &&
-      typeof a.url === 'string' &&
-      typeof a.titulo === 'string' &&
-      typeof a.fecha_pub === 'string',
-  );
+  const completos = (lista: unknown) =>
+    (Array.isArray(lista) ? (lista as RespuestaBuscar['articulos']) : []).filter(
+      (a) =>
+        a &&
+        typeof a.id === 'number' &&
+        typeof a.url === 'string' &&
+        typeof a.titulo === 'string' &&
+        typeof a.fecha_pub === 'string',
+    );
+  const normalizar = (a: RespuestaBuscar['articulos'][number]) => ({
+    ...a,
+    autores: Array.isArray(a.autores) ? a.autores.filter((x) => typeof x === 'string') : [],
+    numero: typeof a.numero === 'string' ? a.numero : null,
+    seccion: typeof a.seccion === 'string' ? a.seccion : null,
+    resumen_linea: typeof a.resumen_linea === 'string' ? a.resumen_linea : null,
+  });
+  const articulos = completos(d.articulos);
 
   return {
     modo: d.modo as RespuestaBuscar['modo'],
     pregunta: typeof d.pregunta === 'string' ? d.pregunta : '',
     respuesta: typeof d.respuesta === 'string' ? d.respuesta : null,
-    articulos: articulos.map((a) => ({
-      ...a,
-      autores: Array.isArray(a.autores) ? a.autores.filter((x) => typeof x === 'string') : [],
-      numero: typeof a.numero === 'string' ? a.numero : null,
-      seccion: typeof a.seccion === 'string' ? a.seccion : null,
-      resumen_linea: typeof a.resumen_linea === 'string' ? a.resumen_linea : null,
-    })),
+    articulos: articulos.map(normalizar),
+    citadas: completos(d.citadas).map(normalizar),
     total: d.total ?? 0,
     pagina: typeof d.pagina === 'number' ? d.pagina : 1,
     por_pagina: typeof d.por_pagina === 'number' ? d.por_pagina : articulos.length,

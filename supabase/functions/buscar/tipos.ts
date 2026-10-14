@@ -135,6 +135,8 @@ export interface RespuestaOk {
   filtros: FiltrosAplicados;
   sintesis: Sintesis | null;
   resultados: Ficha[];
+  /** Fichas citadas en `sintesis.texto` que no vienen en `resultados`. */
+  citadas: Ficha[];
   /** Total de coincidencias en la base, no el largo de `resultados`. */
   total: number;
   pagina: number;

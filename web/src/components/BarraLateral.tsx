@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
   ExternalLink,
-  LogIn,
   LogOut,
   MessageSquare,
   PanelLeftClose,
@@ -14,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { BotonGoogle } from '@/components/BotonGoogle';
 import { LogoNexos } from '@/components/LogoNexos';
 import { DIAS_RETENCION, PESTANAS, type PestanaId } from '@/lib/constantes';
 import type { Faceta, RespuestaFacetas } from '@/lib/contrato';
@@ -177,10 +177,7 @@ function SeccionConversaciones({
           <p className="mono-meta mt-1 text-muted-foreground">
             Sin sesión se guardan solo en este navegador y se eliminan a los {DIAS_RETENCION} días.
           </p>
-          <Button variant="contorno" onClick={onAcceder} className="mt-2 w-full justify-start gap-2">
-            <LogIn className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
-            Iniciar sesión con Google
-          </Button>
+          <BotonGoogle onClick={onAcceder} className="mt-2.5" />
         </div>
       ) : null}
     </section>

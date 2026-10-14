@@ -173,7 +173,7 @@ export function BloqueRespuesta({
                   <span className="px-1.5 text-border">·</span>
                   <span className="tabular">{conMiles(r.ms)} ms</span>
                 </p>
-                <TextoRespuesta texto={r.respuesta} articulos={r.articulos} />
+                <TextoRespuesta texto={r.respuesta} articulos={[...r.articulos, ...(r.citadas ?? [])]} />
               </div>
             ) : null}
 

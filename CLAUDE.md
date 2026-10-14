@@ -866,6 +866,29 @@ chats recientes en el sidebar. La sesión sigue sin ser la llave del archivo
   está apagado lo dice en español en vez de mandar al editor a una página de
   error en JSON.
 
+### Listas de catálogo con panorama redactado (2026-10-14)
+
+Pedido del dueño: "Todo lo que publicó Ángeles Mastretta" abría con una sola
+frase de conteo; quería un overview. **Esto rompe a propósito el "cero LLM"
+de catálogo de la sección 4, pero solo para el texto de arriba**: la lista
+sigue siendo el WHERE paginado sin modelo, y la página 2 en adelante no llama
+a nada (el frontend conserva el texto de la página 1).
+
+`carriles/perfil.ts`: en la página 1 de una lista con ≥3 textos, Haiku lee una
+muestra de hasta `PERFIL_MUESTRA` (240) fichas repartidas por el periodo y
+redacta un panorama del REGISTRO del archivo (nunca biografía) citando 5–10
+textos con `[id:N]`; las fichas citadas viajan en `citadas` porque casi nunca
+están en la página visible. Cuidado de créditos del dueño:
+- Se guarda en `sintesis_guardadas` (migración 0010) por filtros, 30 días: el
+  segundo clic en el mismo autor cuesta cero y responde sin modelo.
+- Lo no guardado cuenta contra el límite de 30/hora: se registra como
+  `catalogo_resumen`, que `verificarLimite` sí cuenta. Pasado el límite, se
+  responde con la frase calculada de siempre.
+- Cualquier falla deja la frase calculada; la lista nunca depende del modelo.
+
+Las respuestas de `hibrida` también se alargaron (3–5 párrafos, el primero un
+panorama sin citas), a pedido.
+
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.
 ---

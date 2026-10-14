@@ -231,6 +231,9 @@ export interface ResultadoCarril {
   aproximados: boolean;
   reformulacion: string | null;
   sintesis: Sintesis | null;
+  /** Fichas que cita la síntesis y no están en `fichas` (el panorama de una
+   *  lista de catálogo cita textos de toda la obra, no solo de la página). */
+  citadas?: Ficha[];
   filtros: FiltrosConsulta;
   avisos: Aviso[];
   pasos: PasoTraza[];

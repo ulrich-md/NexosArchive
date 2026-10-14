@@ -323,9 +323,27 @@ export default function App() {
         pagina,
         filtros: turno.respuesta?.filtros ?? undefined,
       })
-        .then((respuesta) => {
+        .then((pagina) => {
+          // Solo cambia la lista: el texto de arriba (y lo que cita) y la traza
+          // son de la pregunta, no de la página — la página 2 ya no los trae.
           setTurnos((ts) =>
-            ts.map((t) => (t.id === turno.id ? { ...t, respuesta, paginando: false } : t)),
+            ts.map((t) =>
+              t.id === turno.id
+                ? {
+                    ...t,
+                    paginando: false,
+                    respuesta: t.respuesta
+                      ? {
+                          ...pagina,
+                          respuesta: t.respuesta.respuesta ?? pagina.respuesta,
+                          citadas: t.respuesta.citadas ?? [],
+                          traza: t.respuesta.traza,
+                          pregunta: t.respuesta.pregunta,
+                        }
+                      : pagina,
+                  }
+                : t,
+            ),
           );
         })
         .catch(() => {

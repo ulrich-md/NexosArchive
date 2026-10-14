@@ -126,6 +126,9 @@ export const HIBRIDA_SIN_REDACCION = 8;
  * 5.5 cambia de tarifa. 1,000 es además el tope de filas de PostgREST.
  */
 export const LECTURA_AUTOR_MAX = entero('LECTURA_AUTOR_MAX', 1000);
+/** Fichas que lee el modelo para el panorama de una lista de catálogo
+ *  (carriles/perfil.ts): ~20k tokens, unas décimas de centavo con Haiku. */
+export const PERFIL_MUESTRA = entero('PERFIL_MUESTRA', 240);
 /** Máximo de fichas citadas en una respuesta directa. */
 export const HIBRIDA_MAX_CITADAS = 15;
 /**

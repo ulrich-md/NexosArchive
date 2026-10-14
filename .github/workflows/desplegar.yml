@@ -26,9 +26,12 @@ on:
   workflow_dispatch:
     inputs:
       migracion:
-        description: 'Migración a aplicar, p. ej. 0006_busqueda_por_significado.sql (vacío = ninguna)'
+        # La 0006 es idempotente (if not exists / create or replace): volver a
+        # aplicarla no cambia nada, así que va por defecto y nadie tiene que
+        # acordarse de escribirla. Para una migración nueva, cambiar aquí.
+        description: 'Migración a aplicar (vacío = ninguna)'
         required: false
-        default: ''
+        default: '0006_busqueda_por_significado.sql'
       desplegar:
         description: 'Desplegar las Edge Functions'
         type: boolean
@@ -60,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Revisar secretos
         env:
@@ -112,7 +115,7 @@ jobs:
           supabase functions deploy buscar --project-ref "$PROJECT_REF" --no-verify-jwt
           supabase functions deploy facetas --project-ref "$PROJECT_REF" --no-verify-jwt
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.embeber)
         with:
           node-version: 22

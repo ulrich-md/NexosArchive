@@ -55,10 +55,15 @@ const { count: pendientes, error: errConteo } = await bd
   .select('id', { count: 'exact', head: true })
   .is('embedding', null);
 if (errConteo) {
+  // Un conteo con `head: true` no trae cuerpo: si la columna no existe, el
+  // error llega con `message` VACÍO (pasó en la primera corrida del workflow).
+  // Se repite la consulta sin `head` para obtener el motivo real.
+  const { error: detalle } = await bd.from('articulos').select('id').is('embedding', null).limit(1);
+  const motivo = detalle?.message || errConteo.message || '(sin detalle)';
   console.error(
-    /embedding/.test(errConteo.message)
-      ? 'La columna `embedding` no existe: aplica antes supabase/migrations/0006_busqueda_por_significado.sql.'
-      : `No se pudo contar lo pendiente: ${errConteo.message}`,
+    /embedding/.test(motivo)
+      ? 'La columna `embedding` no existe: falta aplicar supabase/migrations/0006_busqueda_por_significado.sql.'
+      : `No se pudo contar lo pendiente: ${motivo}`,
   );
   process.exit(1);
 }

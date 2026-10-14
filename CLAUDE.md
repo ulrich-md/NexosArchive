@@ -705,6 +705,22 @@ vectores siguen en Gemini (gratis, 1,000 al día) y nada depende ya de ellos.
 - La llave vive en el secreto `ANTHROPIC_API_KEY` de GitHub; el workflow la
   copia a los secretos de la función en cada despliegue (por archivo, nunca en
   el log). Sin ese secreto, la función responde con Gemini.
+
+Medido el mismo día, ya con Haiku en producción:
+
+- **Haiku es mucho más estricto que Gemini al elegir.** Con el prompt de
+  entonces ("descarta lo que no trate el tema") concluyó que Mastretta "no
+  tiene textos sobre comida de manera central" y eligió 3, dejando fuera "La
+  cocina de Marichu"; Gemini había elegido 8 pertinentes. El prompt `directa`
+  (`carriles/redaccion.ts`) ahora pide recall: pertinente es todo texto donde
+  el tema aparece de forma sustancial, no solo el central; primero lo central,
+  después lo secundario; nada de "no hay" si hubo pertinentes.
+- **La búsqueda por palabras no leía los resúmenes.** `ts` es título + autores +
+  cuerpo, y el impreso de www no tiene cuerpo: para 1978–2005 solo se buscaba
+  en el título. La migración `0008_buscar_tambien_en_resumen.sql` agrega
+  `ts_meta` (columna generada: título A, resumen y temas B, con índice GIN) y
+  `buscar_articulos_hibrido` busca en `ts OR ts_meta` (BitmapOr de los dos
+  índices). `ts` no se toca: lleva cuerpos que no se guardan en ningún lado.
 ---
 ## 5. Esquema
 ```sql

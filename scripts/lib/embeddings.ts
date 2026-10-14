@@ -74,7 +74,16 @@ export async function embeberLote(
     const cuerpo = (await res.text().catch(() => '')).slice(0, 500);
     const err: ErrorEmbeddings = new Error(`HTTP ${res.status}: ${cuerpo}`);
     err.status = res.status;
-    err.cuotaDiaria = res.status === 429 && /per\s*day|PerDay/i.test(cuerpo);
+    // El 429 de cuota diaria de embeddings NO dice "per day" (medido
+    // 2026-10-14): dice `embed_content_free_tier_requests, limit: 1000` y
+    // "Please retry in 20h25m…". Se reconoce por cualquiera de las tres
+    // señales; esperar un minuto ahí solo gasta seis reintentos.
+    const esperaHoras = /retry in (\d+)h/i.exec(cuerpo);
+    err.cuotaDiaria = res.status === 429 && (
+      /per\s*day|PerDay/i.test(cuerpo) ||
+      /free_tier_requests/i.test(cuerpo) ||
+      (esperaHoras !== null && Number(esperaHoras[1]) >= 1)
+    );
     err.fatal = res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404;
     throw err;
   }

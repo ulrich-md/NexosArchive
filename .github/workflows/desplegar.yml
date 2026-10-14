@@ -10,9 +10,10 @@
 #   - A mano (Actions → "Desplegar archivo" → Run workflow): todo lo anterior.
 #   - En cada push a la rama por defecto que toque supabase/functions: solo
 #     despliega. Así "subir el código" y "que esté vivo" son lo mismo.
-#   - Una vez al día: solo carga vectores pendientes. La cuota gratuita de
-#     Gemini se acaba a mitad de la carga inicial; esto la retoma solo, y
-#     también rehace los vectores que un re-enriquecimiento haya vaciado.
+#   - Cada 6 horas: solo carga vectores pendientes. El plan gratuito de
+#     Gemini permite 1,000 embeddings AL DÍA (medido): sin facturación la
+#     carga completa tarda semanas; esto la retoma sola, y también rehace los
+#     vectores que un re-enriquecimiento haya vaciado.
 #
 # Secretos del repo (Settings → Secrets and variables → Actions):
 #   SUPABASE_ACCESS_TOKEN  token personal de supabase.com/dashboard/account/tokens
@@ -44,7 +45,9 @@ on:
     branches: [claude/nueva-sesion-ituzea]
     paths: ['supabase/functions/**']
   schedule:
-    - cron: '17 9 * * *'
+    # Cada 6 horas: si el cupo de embeddings ya se agotó, la corrida termina
+    # en segundos; si se liberó (o ya hay facturación), sigue cargando.
+    - cron: '17 */6 * * *'
 
 permissions:
   contents: read

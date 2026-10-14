@@ -667,10 +667,13 @@ texto) y conserva lo ya cargado. Medido en local: guardar 100 vectores, 0.36 s.
 Regla general: **nunca escribir en lote sobre `articulos` algo que no sea
 metadata**: cada UPDATE paga los cuatro GIN.
 
-Ojo con la cuota gratuita de embeddings: el primer 429 llegó tras UNA
-petición de 100 textos, así que el cupo por minuto cuenta textos, no
-peticiones (~100 por minuto). La carga completa (~33k) no cabe en una corrida;
-el workflow la retoma solo cada día.
+Cuota gratuita de embeddings, medida (2026-10-14): **100 textos por minuto y
+1,000 al día** (`embed_content_free_tier_requests, limit: 1000`). Cuenta
+textos, no peticiones: un `batchEmbedContents` de 100 gasta 100. Sin
+facturación, los ~33k artículos tardan más de un mes; con facturación, una
+corrida. Ese 429 NO dice "per day" — se reconoce por `free_tier_requests` o
+por "retry in Nh" (`scripts/lib/embeddings.ts`). El workflow reintenta cada 6
+horas.
 ---
 ## 5. Esquema
 ```sql

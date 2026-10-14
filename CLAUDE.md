@@ -674,6 +674,35 @@ facturación, los ~33k artículos tardan más de un mes; con facturación, una
 corrida. Ese 429 NO dice "per day" — se reconoce por "retry in Nh", una
 espera de horas (`scripts/lib/embeddings.ts`). El workflow reintenta cada 6
 horas.
+
+### Claude Haiku 5.5 responde; Gemini queda para vectores y respaldo (2026-10-14)
+
+Decisión del dueño: el router, el seguimiento del hilo, la expansión del tema y
+la redacción pasan a **Claude Haiku 5.5** (`claude-haiku-5-5`, $0.10/$0.50 por
+MTok debajo de 100k tokens de prompt). El cupo gratuito de Gemini (20 al día
+por modelo) tumbaba respuestas en uso real. Anthropic no ofrece embeddings: los
+vectores siguen en Gemini (gratis, 1,000 al día) y nada depende ya de ellos.
+
+- `claude.ts`: SDK oficial, salidas estructuradas (`output_config.format`) con
+  los MISMOS esquemas de `validacion.ts` pasados por `aEsquemaClaude()`
+  (nulables como `anyOf`, sin `minItems`/`maxItems`, objetos cerrados), y la
+  misma validación nuestra después. Haiku 5.5 da 400 con `temperature`: no se
+  manda. Pensamiento apagado (válido en effort low/medium/high); la respuesta
+  se lee por tipo de bloque. `refusal` → `LLM_RECHAZO`, sin reintento en otro
+  proveedor.
+- `llm.ts`: Claude primero; si no hay llave o falla (cupo, red, esquema), la
+  misma petición va a Gemini. Router y carriles solo importan de aquí.
+- **Autor + tema ya no busca dentro de la obra: la lee completa.** Si el autor
+  tiene hasta `LECTURA_AUTOR_MAX` (700) textos, el modelo recibe todas sus
+  fichas (título, temas, resumen; ~50k tokens, ~$0.005) y elige. Es lo único
+  inmune al stemmer y a los vectores pendientes.
+- **Tema sin autor: expansión.** `expandirTema()` pide a Haiku 4–8 palabras
+  con que el archivo hablaría del tema («comida» → cocina, gastronomía,
+  mole…) y se buscan todas (OR con ranking). La traza las enseña. Los
+  términos se devuelven con acentos: el índice `spanish` no los quita.
+- La llave vive en el secreto `ANTHROPIC_API_KEY` de GitHub; el workflow la
+  copia a los secretos de la función en cada despliegue (por archivo, nunca en
+  el log). Sin ese secreto, la función responde con Gemini.
 ---
 ## 5. Esquema
 ```sql

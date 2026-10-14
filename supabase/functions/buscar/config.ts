@@ -39,9 +39,16 @@ export function obligatorio(nombre: string): string {
 export const supabaseUrl = () => obligatorio('SUPABASE_URL');
 export const supabaseServiceRole = () => obligatorio('SUPABASE_SERVICE_ROLE_KEY');
 
-// --- Gemini -----------------------------------------------------------------
-// El proyecto usa Gemini (decisión del dueño, por costo), no Claude como decía
-// la sección 8 original del spec.
+// --- Claude (principal) ------------------------------------------------------
+// Decisión del dueño (2026-10-14): el router, la reformulación del hilo, la
+// expansión del tema y la redacción pasan a Claude Haiku 5.5. El cupo
+// gratuito de Gemini (20 al día por modelo) tumbaba respuestas en uso real.
+// Gemini queda como respaldo si Claude falla, y para los vectores (Anthropic
+// no ofrece embeddings).
+export const anthropicApiKey = () => env('ANTHROPIC_API_KEY');
+export const MODELO_CLAUDE = env('MODELO_CLAUDE') ?? 'claude-haiku-5-5';
+
+// --- Gemini (respaldo y vectores) --------------------------------------------
 export const geminiApiKey = () => env('GEMINI_API_KEY');
 
 /**
@@ -112,6 +119,12 @@ export const TIMEOUT_EMBEDDING_MS = entero('TIMEOUT_EMBEDDING_MS', 5_000);
 export const HIBRIDA_CANDIDATOS = entero('HIBRIDA_CANDIDATOS', 40);
 /** Fichas que se enseñan si el modelo no pudo redactar (orden por RRF). */
 export const HIBRIDA_SIN_REDACCION = 8;
+/**
+ * Si la obra de un autor tiene hasta estos textos, el modelo la lee completa
+ * en vez de buscar en ella. ~70 tokens por ficha: 700 fichas son ~50k tokens,
+ * debajo de los 100k donde Haiku 5.5 cambia de tarifa.
+ */
+export const LECTURA_AUTOR_MAX = entero('LECTURA_AUTOR_MAX', 700);
 /** Máximo de fichas citadas en una respuesta directa. */
 export const HIBRIDA_MAX_CITADAS = 15;
 /**

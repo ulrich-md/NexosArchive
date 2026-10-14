@@ -9,7 +9,7 @@
 //   - Todo id se valida contra los que se le dieron; uno inventado se borra.
 
 import { MAX_TOKENS_SINTESIS, MODELOS_GEMINI, TIMEOUT_SINTESIS_MS } from '../config.ts';
-import { llamarConHerramienta } from '../gemini.ts';
+import { llamarConHerramienta } from '../llm.ts';
 import { escaparParaPrompt } from '../texto.ts';
 import { ESQUEMA_RESPUESTA, validarRespuesta } from '../validacion.ts';
 import type { FilaArticulo } from '../tipos.ts';
@@ -115,6 +115,7 @@ export async function redactar(
     // El pensamiento extendido no convive con forzar un esquema, y esto tiene
     // que responder en segundos.
     pensamientoApagado: true,
+    esfuerzo: 'medium',
     herramienta: {
       name: 'redactar_respuesta',
       description: 'Redacta la respuesta citando fichas por id. Nunca títulos, fechas ni ligas.',

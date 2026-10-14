@@ -17,7 +17,7 @@
 import { MAX_TOKENS_ROUTER, MODELOS_GEMINI, TIMEOUT_ROUTER_MS } from './config.ts';
 import { catalogoAutores, resolverAutor, type AutorResuelto } from './bd.ts';
 import { ErrorBuscar } from './errores.ts';
-import { hayModelo, llamarConHerramienta } from './gemini.ts';
+import { hayModelo, llamarConHerramienta } from './llm.ts';
 import { ESQUEMA_ROUTER, ESQUEMA_SEGUIMIENTO, validarClasificacion, validarSeguimiento } from './validacion.ts';
 import {
   esVacia,
@@ -514,7 +514,7 @@ export async function clasificar(
   if (heuristica) return heuristica;
 
   if (!permitirLlm) return await clasificarRespaldo(pregunta, 'el carril no admite llamadas a un modelo');
-  if (!hayModelo()) return await clasificarRespaldo(pregunta, 'falta GEMINI_API_KEY');
+  if (!hayModelo()) return await clasificarRespaldo(pregunta, 'no hay llave de ningún modelo (ANTHROPIC_API_KEY ni GEMINI_API_KEY)');
 
   try {
     return await clasificarConLlm(pregunta);

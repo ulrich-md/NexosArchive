@@ -30,7 +30,7 @@ export interface HerramientaEstricta {
   input_schema: Record<string, unknown>;
 }
 
-interface OpcionesLlamada<T> {
+export interface OpcionesLlamada<T> {
   /**
    * Modelos a probar, en orden. La cuota gratuita de Gemini es de 20
    * peticiones al día POR PROYECTO Y POR MODELO, así que cada uno trae su
@@ -48,6 +48,9 @@ interface OpcionesLlamada<T> {
   timeoutMs: number;
   /** Pensamiento apagado: para clasificar y ordenar no aporta y se cobra. */
   pensamientoApagado?: boolean;
+  /** Solo Claude: cuánto se esfuerza (`output_config.effort`). Por defecto
+   *  `low`: clasificar y expandir no lo necesitan; redactar usa `medium`. */
+  esfuerzo?: 'low' | 'medium' | 'high';
   /** Valida el input crudo del modelo y devuelve el objeto ya tipado. */
   validar: (crudo: unknown) => T;
   /** Se llama con el modelo que de verdad respondió, para trazas/UI que lo

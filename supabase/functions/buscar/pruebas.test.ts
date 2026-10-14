@@ -30,7 +30,9 @@ import { quitarTitulosEscritos, validarClasificacion, validarFiltrosEco, validar
 import { detectarCharla, quitarCortesia, sanearParrafos } from './texto.ts';
 import { fraseCatalogo } from './carriles/catalogo.ts';
 import { literalArreglo } from './carriles/comun.ts';
-import { hayTema, textoDeBusqueda } from './carriles/significado.ts';
+import { hayTema, textoDeBusqueda, validarExpansion } from './carriles/significado.ts';
+import { aEsquemaClaude } from './claude.ts';
+import { ESQUEMA_RESPUESTA, ESQUEMA_ROUTER } from './validacion.ts';
 import { normalizarPaginacion, sinTemasFantasma } from './carriles/catalogo.ts';
 import { filtrosVacios } from './carriles/comun.ts';
 import { aEsquemaGemini } from './gemini.ts';
@@ -490,4 +492,38 @@ Deno.test('quitarTitulosEscritos borra el título que el modelo repitió (caso r
   );
   // Un título corto puede ser una palabra normal: no se toca.
   assertEquals(quitarTitulosEscritos('Publicó aforismos [id:3].', ['Aforismos']), 'Publicó aforismos [id:3].');
+});
+
+// --- Claude -----------------------------------------------------------------
+
+Deno.test('aEsquemaClaude: nulables como anyOf, sin restricciones no soportadas, objetos cerrados', () => {
+  const e = aEsquemaClaude({
+    type: 'object',
+    properties: {
+      anio: { type: ['integer', 'null'], description: 'x' },
+      temas: { type: 'array', minItems: 3, maxItems: 6, items: { type: 'object', properties: { t: { type: 'string' } } } },
+    },
+  }) as Record<string, any>;
+  assertEquals(e.additionalProperties, false);
+  assertEquals(e.properties.anio, { anyOf: [{ description: 'x', type: 'integer' }, { type: 'null' }] });
+  assertEquals(e.properties.temas.minItems, undefined);
+  assertEquals(e.properties.temas.items.additionalProperties, false);
+});
+
+Deno.test('aEsquemaClaude no deja restricciones no soportadas en los esquemas reales', () => {
+  for (const esquema of [ESQUEMA_ROUTER, ESQUEMA_RESPUESTA]) {
+    const texto = JSON.stringify(aEsquemaClaude(esquema));
+    for (const prohibida of ['minItems', 'maxItems', 'minimum', 'maximum', 'minLength', 'maxLength']) {
+      assert(!texto.includes(`"${prohibida}"`), `${prohibida} sigue en el esquema`);
+    }
+    assert(!texto.includes('"type":["'), 'queda un type como arreglo');
+  }
+});
+
+Deno.test('validarExpansion: palabras útiles, sin repetir el tema ni colar cifras', () => {
+  assertEquals(
+    validarExpansion({ terminos: ['Cocina', 'gastronomía', 'comida', '1988', 'mole', 'cocina', 'una frase demasiado larga para ser un término'] }, 'comida'),
+    ['cocina', 'gastronomía', 'mole'],
+  );
+  assertEquals(validarExpansion(null, 'comida'), []);
 });

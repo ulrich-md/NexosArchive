@@ -17,7 +17,9 @@
 #
 # Secretos del repo (Settings → Secrets and variables → Actions):
 #   SUPABASE_ACCESS_TOKEN  token personal de supabase.com/dashboard/account/tokens
-#   GEMINI_API_KEY         llave de aistudio.google.com/apikey
+#   GEMINI_API_KEY         llave de aistudio.google.com/apikey (vectores)
+#   ANTHROPIC_API_KEY      llave de console.anthropic.com (Claude Haiku: router y
+#                          respuestas). Se copia a los secretos de la función.
 # La service role NO se guarda en GitHub: se pide a la Management API en cada
 # corrida y se enmascara en los logs.
 
@@ -107,6 +109,24 @@ jobs:
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.desplegar)
         with:
           version: latest
+
+      - name: Sincronizar llaves de la función
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.desplegar)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # La llave de Claude vive en los secretos de GitHub y se copia a los
+          # de la función en cada despliegue. Va por archivo y no por argumento,
+          # para que nunca aparezca en la lista de procesos ni en el log.
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::warning::No hay secreto ANTHROPIC_API_KEY en GitHub: la función responde con Gemini."
+            exit 0
+          fi
+          umask 077
+          printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY" > "$RUNNER_TEMP/llaves.env"
+          supabase secrets set --env-file "$RUNNER_TEMP/llaves.env" --project-ref "$PROJECT_REF"
+          rm -f "$RUNNER_TEMP/llaves.env"
 
       - name: Desplegar Edge Functions
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.desplegar)

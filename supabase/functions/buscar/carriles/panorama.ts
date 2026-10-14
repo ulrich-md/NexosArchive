@@ -15,7 +15,7 @@ import { PANORAMA_MAX_FILAS, PANORAMA_MIN_FILAS } from '../config.ts';
 import { bd } from '../bd.ts';
 import { errorBd, ErrorBuscar } from '../errores.ts';
 import { armarFichas } from '../fichas.ts';
-import { hayModelo } from '../gemini.ts';
+import { hayModelo } from '../llm.ts';
 import { redactar } from './redaccion.ts';
 import { buscarPorSignificado, hayTema } from './significado.ts';
 import {
@@ -86,8 +86,8 @@ async function recolectar(filtros: FiltrosConsulta): Promise<Recoleccion> {
   // encuentra nada, se sigue con los pases de siempre.
   if (hayTema(filtros)) {
     try {
-      const sig = await buscarPorSignificado(filtros, PANORAMA_POR_SIGNIFICADO);
-      pasos.push(sig.paso);
+      const sig = await buscarPorSignificado(filtros, PANORAMA_POR_SIGNIFICADO, { expandir: true });
+      pasos.push(...sig.pasosPrevios, sig.paso);
       if (sig.candidatos.length > 0) {
         avisos.push(...sig.avisos);
         return {

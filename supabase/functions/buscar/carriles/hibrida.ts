@@ -15,12 +15,12 @@
 // Lo que no hace nunca: contestar vacío (sección 7, regla 3) ni enseñar
 // candidatos que el modelo descartó como si fueran la respuesta.
 
-import { HIBRIDA_CANDIDATOS, HIBRIDA_MAX_CITADAS, HIBRIDA_SIN_REDACCION } from '../config.ts';
+import { HIBRIDA_CANDIDATOS, HIBRIDA_MAX_CITADAS, HIBRIDA_SIN_REDACCION, LECTURA_AUTOR_MAX } from '../config.ts';
 import { ErrorBuscar } from '../errores.ts';
 import { armarFichas } from '../fichas.ts';
-import { hayModelo } from '../gemini.ts';
-import type { Aviso, Ficha, PasoTraza } from '../tipos.ts';
-import { aproximar, type FiltrosConsulta, type ResultadoCarril } from './comun.ts';
+import { hayModelo } from '../llm.ts';
+import type { Aviso, Ficha, FilaArticulo, PasoTraza } from '../tipos.ts';
+import { aproximar, buscarArticulos, type FiltrosConsulta, type ResultadoCarril } from './comun.ts';
 import { redactar } from './redaccion.ts';
 import { buscarPorSignificado, textoDeBusqueda } from './significado.ts';
 
@@ -41,10 +41,40 @@ export async function carrilHibrida(
     });
   }
 
-  const busqueda = await buscarPorSignificado(filtros, HIBRIDA_CANDIDATOS);
-  avisos.push(...busqueda.avisos);
-  const pasos: PasoTraza[] = [busqueda.paso];
-  const candidatos = busqueda.candidatos;
+  const pasos: PasoTraza[] = [];
+  let candidatos: FilaArticulo[] = [];
+
+  // Con autor, si su obra cabe, el modelo la lee COMPLETA (título, temas y
+  // resumen de cada texto) en vez de fiarse de una búsqueda: es la única
+  // forma de no perder "La cocina de mi abuela" cuando se preguntó por
+  // "comida". Cabe de sobra: ~700 fichas son ~50k tokens, ~$0.005 con Haiku.
+  let leyoTodo = false;
+  if (filtros.autores.length > 0) {
+    const t0 = performance.now();
+    const obra = await buscarArticulos(
+      { ...filtros, texto: null, temas: [] },
+      { limite: LECTURA_AUTOR_MAX },
+    );
+    if (obra.total > 0 && obra.total <= LECTURA_AUTOR_MAX) {
+      candidatos = obra.filas;
+      leyoTodo = true;
+      pasos.push({
+        paso: 'sql',
+        titulo: `Reunió toda la obra de ${filtros.autores.join(', ')}`,
+        detalle: `${obra.total} textos${filtros.rango_pub ? ` publicados entre ${filtros.rango_pub.desde} y ${filtros.rango_pub.hasta}` : ''} · el modelo los lee todos`,
+        ms: Math.round(performance.now() - t0),
+      });
+    }
+  }
+
+  // Sin autor, o con una obra demasiado grande: búsqueda por significado y
+  // por palabras, con el tema ampliado.
+  if (!leyoTodo) {
+    const busqueda = await buscarPorSignificado(filtros, HIBRIDA_CANDIDATOS, { expandir: true });
+    avisos.push(...busqueda.avisos);
+    pasos.push(...busqueda.pasosPrevios, busqueda.paso);
+    candidatos = busqueda.candidatos;
+  }
 
   // Ni por significado ni por palabras: lo más próximo, marcado como tal.
   if (candidatos.length === 0) {

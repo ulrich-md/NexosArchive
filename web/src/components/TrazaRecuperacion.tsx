@@ -114,7 +114,11 @@ function DetallePaso({ paso }: { paso: PasoTraza }) {
 
 export function TrazaRecuperacion({ pasos }: { pasos: PasoTraza[] }) {
   const [abierta, setAbierta] = useState(false);
-  const indiceCiclo = useIndiceCiclo(pasos.length);
+  // El índice viene del render anterior: si la traza nueva es más corta (la
+  // página 2 de una lista trae 2 pasos y la 1 traía 3), en el primer render
+  // apunta a un paso que ya no existe, y leerlo tumbaba la página entera
+  // (visto en producción, 2026-10-14). Se acota al tamaño real.
+  const indiceCiclo = Math.min(useIndiceCiclo(pasos.length), Math.max(pasos.length - 1, 0));
   const ciclando = indiceCiclo < pasos.length - 1;
 
   if (pasos.length === 0) return null;

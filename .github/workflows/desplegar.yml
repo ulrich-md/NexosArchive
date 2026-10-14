@@ -147,7 +147,12 @@ jobs:
         if: github.event_name != 'schedule'
         run: |
           llave=$(grep '^VITE_SUPABASE_ANON_KEY=' web/.env | cut -d= -f2-)
-          for pregunta in 'Hola' 'Que ha escrito angeles mastretta sobre comida'; do
+          # Solo preguntas que NO gastan créditos de Claude: el saludo no llama
+          # al modelo y el panorama de esta lista ya está guardado (0010). Antes
+          # se probaba "Mastretta + comida", que lee su obra completa: cada
+          # despliegue costaba ~1 centavo y en un día de 16 despliegues fue casi
+          # todo el gasto.
+          for pregunta in 'Hola' 'Todo lo que publicó Ángeles Mastretta en el archivo'; do
             echo "=== $pregunta"
             jq -n --arg p "$pregunta" '{pregunta: $p}' > /tmp/pregunta.json
             curl -sS -m 60 -X POST "$SUPABASE_URL/functions/v1/buscar" \

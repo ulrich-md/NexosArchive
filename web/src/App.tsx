@@ -11,10 +11,18 @@ import { ErrorConsulta, MS_AVISO_LENTO, MS_LIMITE, buscar, facetas as pedirFacet
 import type { RespuestaFacetas } from '@/lib/contrato';
 import { MS_MIN_PENSANDO } from '@/lib/constantes';
 import {
-  borrarConversacionGuardada,
-  cargarConversacionGuardada,
-  guardarConversacion,
-} from '@/lib/conversacion';
+  abrir as abrirGuardada,
+  borrar as borrarGuardada,
+  conversacionLocalReciente,
+  guardar as guardarEnAlmacen,
+  listarRecientes,
+  nuevoIdConversacion,
+  recientesLocales,
+  subirLocalesALaCuenta,
+  tituloDe,
+  turnosGuardables,
+  type ResumenConversacion,
+} from '@/lib/conversaciones';
 import {
   alCambiarSesion,
   cerrarSesion,
@@ -41,7 +49,21 @@ function nuevoId() {
 
 export default function App() {
   const [texto, setTexto] = useState('');
-  const [turnos, setTurnos] = useState<Turno[]>(() => cargarConversacionGuardada());
+  // Al recargar se retoma la última conversación de este navegador. Con
+  // sesión no hay ninguna aquí (se subieron a la cuenta): se arranca limpio y
+  // las recientes quedan a un clic en el sidebar.
+  const [inicial] = useState(() => {
+    const c = conversacionLocalReciente();
+    return c ? { id: c.id, turnos: c.turnos } : { id: nuevoIdConversacion(), turnos: [] as Turno[] };
+  });
+  const [conversacionId, setConversacionId] = useState(inicial.id);
+  const [turnos, setTurnos] = useState<Turno[]>(inicial.turnos);
+  const [recientes, setRecientes] = useState<ResumenConversacion[]>(() => recientesLocales());
+  const [cargandoRecientes, setCargandoRecientes] = useState(false);
+  const [errorRecientes, setErrorRecientes] = useState<string | null>(null);
+  // Lo último que se guardó de la conversación abierta: evita reescribirla
+  // cuando nada cambió (al abrirla, al recargar).
+  const ultimoGuardadoRef = useRef(JSON.stringify(turnosGuardables(inicial.turnos)));
   const [sidebarAbierta, setSidebarAbierta] = useState(true);
   const [menuMovil, setMenuMovil] = useState(false);
 
@@ -51,6 +73,7 @@ export default function App() {
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [avisoAcceso, setAvisoAcceso] = useState<string | null>(null);
+  const usuarioId = usuario?.id ?? null;
 
   const abortRef = useRef<AbortController | null>(null);
   const ultimoTurnoRef = useRef<HTMLDivElement>(null);
@@ -134,11 +157,59 @@ export default function App() {
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
   }, []);
 
-  // Conversación por sesión de navegador: sin iniciar sesión, se guarda sola
-  // en este navegador y se descarta a los DIAS_RETENCION días.
+  // --- Conversaciones recientes -------------------------------------------
+  // Con sesión vienen de la cuenta; al entrar, las de este navegador se suben
+  // primero. Sin sesión, de este navegador.
   useEffect(() => {
-    guardarConversacion(turnos);
-  }, [turnos]);
+    let vivo = true;
+    setErrorRecientes(null);
+    if (!usuarioId) {
+      setRecientes(recientesLocales());
+      return;
+    }
+    setCargandoRecientes(true);
+    (async () => {
+      try {
+        await subirLocalesALaCuenta();
+      } catch {
+        // Se quedan en el navegador; se reintenta en la próxima visita.
+      }
+      const lista = await listarRecientes(true);
+      if (vivo) setRecientes(lista);
+    })()
+      .catch(() => vivo && setErrorRecientes('No se pudieron cargar tus conversaciones.'))
+      .finally(() => vivo && setCargandoRecientes(false));
+    return () => {
+      vivo = false;
+    };
+  }, [usuarioId]);
+
+  // Cada turno respondido (o cambio de página) guarda la conversación: en la
+  // cuenta si hay sesión, si no en este navegador por DIAS_RETENCION días.
+  useEffect(() => {
+    const guardables = turnosGuardables(turnos);
+    if (guardables.length === 0) return;
+    const firma = JSON.stringify(guardables);
+    if (firma === ultimoGuardadoRef.current) return;
+    const conversacion = {
+      id: conversacionId,
+      titulo: tituloDe(guardables),
+      actualizadaEn: Date.now(),
+      turnos: guardables,
+    };
+    // Sin temporizador: solo cambia al llegar una respuesta o una página, y
+    // uno que se cancelara al abrir otra conversación perdería lo último.
+    ultimoGuardadoRef.current = firma;
+    setRecientes((rs) => [
+      { id: conversacion.id, titulo: conversacion.titulo, actualizadaEn: conversacion.actualizadaEn },
+      ...rs.filter((r) => r.id !== conversacion.id),
+    ]);
+    guardarEnAlmacen(Boolean(usuarioId), conversacion).catch(() => {
+      // Se reintenta con el siguiente cambio.
+      ultimoGuardadoRef.current = '';
+      setErrorRecientes('No se pudo guardar esta conversación en tu cuenta.');
+    });
+  }, [turnos, conversacionId, usuarioId]);
 
   // --- Consulta ------------------------------------------------------------
   const preguntar = useCallback(
@@ -267,12 +338,51 @@ export default function App() {
 
   const cancelar = useCallback(() => abortRef.current?.abort('cancelada'), []);
 
+  // La conversación anterior no se borra: queda en las recientes.
   function nuevoChat() {
     abortRef.current?.abort('cancelada');
+    setConversacionId(nuevoIdConversacion());
     setTurnos([]);
     setTexto('');
     setMenuMovil(false);
-    borrarConversacionGuardada();
+  }
+
+  async function abrirConversacion(id: string) {
+    setMenuMovil(false);
+    if (id === conversacionId) return;
+    abortRef.current?.abort('cancelada');
+    try {
+      const c = await abrirGuardada(Boolean(usuarioId), id);
+      if (!c || c.turnos.length === 0) {
+        setRecientes((rs) => rs.filter((r) => r.id !== id));
+        setAvisoAcceso('Esa conversación ya no está guardada.');
+        return;
+      }
+      ultimoGuardadoRef.current = JSON.stringify(turnosGuardables(c.turnos));
+      setConversacionId(c.id);
+      setTurnos(c.turnos);
+      setTexto('');
+    } catch {
+      setAvisoAcceso('No se pudo abrir la conversación. Intenta de nuevo.');
+    }
+  }
+
+  async function borrarConversacion(id: string) {
+    setRecientes((rs) => rs.filter((r) => r.id !== id));
+    if (id === conversacionId) nuevoChat();
+    try {
+      await borrarGuardada(Boolean(usuarioId), id);
+    } catch {
+      setAvisoAcceso('No se pudo borrar la conversación. Intenta de nuevo.');
+      listarRecientes(Boolean(usuarioId)).then(setRecientes).catch(() => {});
+    }
+  }
+
+  // Al salir se cierra la conversación abierta: era de la cuenta, y en una
+  // computadora compartida no debe quedarse a la vista.
+  async function salir() {
+    nuevoChat();
+    await cerrarSesion();
   }
 
   async function acceder() {
@@ -302,7 +412,13 @@ export default function App() {
           deshabilitado={ocupado}
           usuario={usuario}
           onAcceder={() => void acceder()}
-          onSalir={() => void cerrarSesion()}
+          onSalir={() => void salir()}
+          recientes={recientes}
+          conversacionActual={conversacionId}
+          cargandoRecientes={cargandoRecientes}
+          errorRecientes={errorRecientes}
+          onAbrirConversacion={(id) => void abrirConversacion(id)}
+          onBorrarConversacion={(id) => void borrarConversacion(id)}
         />
       </div>
 

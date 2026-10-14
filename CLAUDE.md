@@ -837,6 +837,35 @@ es además lo que pide esta sección (magic link con lista blanca de dominio),
 así que es el camino más corto cuando se retome — para guardar historial, no
 para leer el archivo.
 
+### Google y conversaciones recientes (2026-10-14)
+
+Pedido del dueño: que la gente pueda iniciar sesión con Google y vea sus
+chats recientes en el sidebar. La sesión sigue sin ser la llave del archivo
+(ACCESO_ANONIMO, arriba): solo conserva el historial.
+
+- **Sin sesión**: hasta 20 conversaciones en `localStorage`, 7 días cada una
+  (`web/src/lib/conversaciones.ts`; migra sola la clave vieja de una sola
+  conversación). **Con sesión**: tabla `conversaciones` (migración
+  `0009_conversaciones.sql`, llave `(usuario, id)`, tope de 200 por persona
+  por trigger) detrás de la Edge Function `conversaciones`, que valida el JWT
+  con `auth.getUser` y filtra siempre por ese usuario. RLS sin policies, igual
+  que el resto: el frontend nunca la toca. Al iniciar sesión, las del
+  navegador se suben a la cuenta y se borran de aquí; al salir, se cierra la
+  conversación abierta (computadoras compartidas).
+- Se guarda lo que la interfaz ya enseñó (preguntas, respuesta, fichas),
+  nunca el cuerpo de un artículo.
+- **`buscar` bloqueaba a quien iniciaba sesión con una cuenta que no fuera
+  @nexos.com.mx** (`DOMINIO_NO_AUTORIZADO`), aunque sin sesión sí podía
+  buscar: iniciar sesión le quitaba el buscador. Con `ACCESO_ANONIMO` el
+  dominio ya no se exige; solo se exige si la bandera se apaga.
+- El proveedor de Google se activa en el dashboard de Supabase (Authentication
+  → Sign In / Providers → Google) con un cliente OAuth de Google Cloud cuyo
+  redirect es `https://tedudsobbqjmgulzksmw.supabase.co/auth/v1/callback`, y
+  los dominios del sitio van en Authentication → URL Configuration. Antes de
+  redirigir, `iniciarSesionGoogle()` consulta `/auth/v1/settings`: si Google
+  está apagado lo dice en español en vez de mandar al editor a una página de
+  error en JSON.
+
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.
 ---

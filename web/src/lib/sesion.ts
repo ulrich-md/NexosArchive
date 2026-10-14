@@ -28,6 +28,7 @@ function obtenerCliente(): SupabaseClient | null {
 }
 
 export interface Usuario {
+  id: string;
   nombre: string | null;
   correo: string | null;
   avatar: string | null;
@@ -55,6 +56,7 @@ export function usuarioDeSesion(sesion: Session | null): Usuario | null {
   if (!sesion?.user) return null;
   const m = sesion.user.user_metadata ?? {};
   return {
+    id: sesion.user.id,
     nombre: (m.full_name as string) ?? (m.name as string) ?? null,
     correo: sesion.user.email ?? null,
     avatar: (m.avatar_url as string) ?? null,
@@ -67,6 +69,18 @@ export async function iniciarSesionGoogle(): Promise<void> {
     throw new Error(
       'Falta configurar el acceso: define VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.',
     );
+  }
+  // Si el proveedor está apagado en Supabase, el redireccionamiento acaba en
+  // una página de error en JSON. Mejor decirlo aquí, en español.
+  try {
+    const r = await fetch(`${URL_SUPABASE}/auth/v1/settings`, { headers: { apikey: ANON_KEY } });
+    const ajustes = (await r.json()) as { external?: { google?: boolean } };
+    if (r.ok && ajustes.external?.google === false) {
+      throw new Error('El acceso con Google todavía no está activado en el archivo.');
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('El acceso con Google')) throw e;
+    // Sin respuesta de los ajustes se intenta de todos modos.
   }
   const { error } = await c.auth.signInWithOAuth({
     provider: 'google',

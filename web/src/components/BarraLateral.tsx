@@ -3,18 +3,21 @@ import {
   ExternalLink,
   LogIn,
   LogOut,
+  MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   Search,
+  Trash2,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LogoNexos } from '@/components/LogoNexos';
-import { PESTANAS, type PestanaId } from '@/lib/constantes';
+import { DIAS_RETENCION, PESTANAS, type PestanaId } from '@/lib/constantes';
 import type { Faceta, RespuestaFacetas } from '@/lib/contrato';
+import type { ResumenConversacion } from '@/lib/conversaciones';
 import type { Usuario } from '@/lib/sesion';
 import { cn, conMiles } from '@/lib/utilidades';
 
@@ -47,6 +50,143 @@ function FilaFaceta({
   );
 }
 
+const FORMATO_DIA = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' });
+const FORMATO_HORA = new Intl.DateTimeFormat('es-MX', { hour: 'numeric', minute: '2-digit' });
+
+function cuando(ms: number): string {
+  const fecha = new Date(ms);
+  const hoy = new Date();
+  const dias = Math.round(
+    (new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).getTime() -
+      new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate()).getTime()) /
+      86_400_000,
+  );
+  if (dias <= 0) return FORMATO_HORA.format(fecha);
+  if (dias === 1) return 'ayer';
+  return FORMATO_DIA.format(fecha).replace('.', '');
+}
+
+function FilaConversacion({
+  conversacion,
+  activa,
+  onAbrir,
+  onBorrar,
+}: {
+  conversacion: ResumenConversacion;
+  activa: boolean;
+  onAbrir: () => void;
+  onBorrar: () => void;
+}) {
+  // Borrar pide un segundo clic: el icono queda a un pelo de la fila.
+  const [confirmando, setConfirmando] = useState(false);
+  return (
+    <div
+      className={cn(
+        'group flex items-center gap-1 rounded-[3px] pr-1 transition-colors hover:bg-muted',
+        activa && 'bg-muted',
+      )}
+      onMouseLeave={() => setConfirmando(false)}
+    >
+      <button
+        type="button"
+        onClick={onAbrir}
+        aria-current={activa ? 'true' : undefined}
+        className="flex min-w-0 flex-1 items-baseline justify-between gap-3 px-2 py-1.5 text-left"
+      >
+        <span className="min-w-0 truncate text-sm text-foreground">{conversacion.titulo}</span>
+        <span className="mono-meta tabular shrink-0 text-muted-foreground md:group-hover:hidden md:group-focus-within:hidden">
+          {cuando(conversacion.actualizadaEn)}
+        </span>
+      </button>
+      {confirmando ? (
+        <button
+          type="button"
+          onClick={onBorrar}
+          onBlur={() => setConfirmando(false)}
+          autoFocus
+          className="mono-meta shrink-0 rounded-[3px] px-1.5 py-0.5 text-destructive hover:bg-destructive/10"
+        >
+          Borrar
+        </button>
+      ) : (
+        <button
+          type="button"
+          aria-label={`Borrar la conversación «${conversacion.titulo}»`}
+          onClick={() => setConfirmando(true)}
+          className="flex shrink-0 rounded-[3px] p-1 text-muted-foreground hover:text-destructive md:hidden md:focus:flex md:group-hover:flex md:group-focus-within:flex"
+        >
+          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SeccionConversaciones({
+  usuario,
+  recientes,
+  actual,
+  cargando,
+  error,
+  onAbrir,
+  onBorrar,
+  onAcceder,
+}: {
+  usuario: Usuario | null;
+  recientes: ResumenConversacion[];
+  actual: string;
+  cargando: boolean;
+  error: string | null;
+  onAbrir: (id: string) => void;
+  onBorrar: (id: string) => void;
+  onAcceder: () => void;
+}) {
+  return (
+    <section aria-label="Conversaciones" className="mt-5 flex max-h-[34vh] min-h-0 flex-col">
+      <p className="mono-meta px-3 font-medium uppercase tracking-[0.14em] text-foreground">
+        Conversaciones
+      </p>
+      <div className="mt-1.5 min-h-0 overflow-y-auto px-2">
+        {cargando && recientes.length === 0 ? (
+          <div className="space-y-2 px-2 py-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-4" retraso={i * 70} />
+            ))}
+          </div>
+        ) : recientes.length === 0 ? (
+          <p className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground">
+            <MessageSquare className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
+            Aún no hay conversaciones.
+          </p>
+        ) : (
+          recientes.map((c) => (
+            <FilaConversacion
+              key={c.id}
+              conversacion={c}
+              activa={c.id === actual}
+              onAbrir={() => onAbrir(c.id)}
+              onBorrar={() => onBorrar(c.id)}
+            />
+          ))
+        )}
+        {error ? <p className="px-2 py-1 text-sm text-destructive">{error}</p> : null}
+      </div>
+      {!usuario ? (
+        <div className="px-3 pt-2">
+          <p className="text-sm text-muted-foreground">Inicia sesión para conservar tus conversaciones.</p>
+          <p className="mono-meta mt-1 text-muted-foreground">
+            Sin sesión se guardan solo en este navegador y se eliminan a los {DIAS_RETENCION} días.
+          </p>
+          <Button variant="contorno" onClick={onAcceder} className="mt-2 w-full justify-start gap-2">
+            <LogIn className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+            Iniciar sesión con Google
+          </Button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function BarraLateral({
   abierta,
   onAbierta,
@@ -61,6 +201,12 @@ export function BarraLateral({
   usuario,
   onAcceder,
   onSalir,
+  recientes,
+  conversacionActual,
+  cargandoRecientes,
+  errorRecientes,
+  onAbrirConversacion,
+  onBorrarConversacion,
 }: {
   abierta: boolean;
   onAbierta: (v: boolean) => void;
@@ -75,6 +221,12 @@ export function BarraLateral({
   usuario: Usuario | null;
   onAcceder: () => void;
   onSalir: () => void;
+  recientes: ResumenConversacion[];
+  conversacionActual: string;
+  cargandoRecientes: boolean;
+  errorRecientes: string | null;
+  onAbrirConversacion: (id: string) => void;
+  onBorrarConversacion: (id: string) => void;
 }) {
   const [pestana, setPestana] = useState<PestanaId>('autores');
   const [filtro, setFiltro] = useState('');
@@ -161,6 +313,17 @@ export function BarraLateral({
         </Button>
       </div>
 
+      <SeccionConversaciones
+        usuario={usuario}
+        recientes={recientes}
+        actual={conversacionActual}
+        cargando={cargandoRecientes}
+        error={errorRecientes}
+        onAbrir={onAbrirConversacion}
+        onBorrar={onBorrarConversacion}
+        onAcceder={onAcceder}
+      />
+
       <p className="mono-meta mt-5 px-3 font-medium uppercase tracking-[0.14em] text-foreground">
         Explorar el archivo
       </p>
@@ -235,19 +398,24 @@ export function BarraLateral({
       </nav>
 
       {usuario ? (
-        <div className="border-t border-border px-3 py-3">
-          <p className="mb-2 text-sm text-muted-foreground">
-            Sesión de {usuario.nombre ?? usuario.correo}.
-          </p>
-          <Button variant="contorno" onClick={onSalir} className="w-full justify-start gap-2">
-            <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
-            <span className="truncate">Cerrar sesión</span>
+        <div className="flex items-center gap-2 border-t border-border px-3 py-2.5">
+          {usuario.avatar ? (
+            <img
+              src={usuario.avatar}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="h-6 w-6 shrink-0 rounded-full"
+            />
+          ) : null}
+          <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={usuario.correo ?? undefined}>
+            {usuario.nombre ?? usuario.correo}
+          </span>
+          <Button variant="texto" size="icono" aria-label="Cerrar sesión" title="Cerrar sesión" onClick={onSalir}>
+            <LogOut className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </Button>
         </div>
       ) : null}
 
-      {/* Las conversaciones se guardan solas en este navegador (sin sesión);
-          Google queda como una opción menor, no como la puerta de entrada. */}
       <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
         <a
           href="https://www.nexos.com.mx"
@@ -258,16 +426,6 @@ export function BarraLateral({
           nexos.com.mx
           <ExternalLink className="h-3 w-3" strokeWidth={1.75} aria-hidden />
         </a>
-        {!usuario ? (
-          <button
-            type="button"
-            onClick={onAcceder}
-            className="mono-meta flex items-center gap-1 text-muted-foreground hover:text-primary"
-          >
-            <LogIn className="h-3 w-3" strokeWidth={1.75} aria-hidden />
-            Google
-          </button>
-        ) : null}
       </div>
     </aside>
   );

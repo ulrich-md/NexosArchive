@@ -57,7 +57,11 @@ export async function autenticar(req: Request): Promise<Sesion> {
 
   const correo = (usuario.email ?? '').toLowerCase();
   const dominio = correo.split('@')[1] ?? '';
-  if (!DOMINIOS_PERMITIDOS.includes(dominio)) {
+  // Con acceso anónimo la sesión no es la llave del archivo, solo conserva el
+  // historial (sección 6): quien entra con Google desde cualquier cuenta
+  // busca igual que sin sesión, y el límite se le cuenta por usuario. Exigir
+  // el dominio aquí le quitaría el buscador justo por haber iniciado sesión.
+  if (!ACCESO_ANONIMO && !DOMINIOS_PERMITIDOS.includes(dominio)) {
     throw new ErrorBuscar(
       'DOMINIO_NO_AUTORIZADO',
       'Esta herramienta es solo para la redacción de Nexos.',

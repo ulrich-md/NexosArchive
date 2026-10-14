@@ -259,3 +259,44 @@ export async function facetas(senal?: AbortSignal): Promise<RespuestaFacetas> {
     anio_max: typeof datos.anio_max === 'number' ? datos.anio_max : null,
   };
 }
+
+// --- Conversaciones de quien inició sesión -----------------------------------
+// La Edge Function `conversaciones` valida el JWT y solo toca las filas de ese
+// usuario. Sin sesión no se llama: las conversaciones viven en el navegador.
+
+export interface ConversacionRemota {
+  id: string;
+  titulo: string;
+  actualizada_en: string;
+  turnos?: unknown[];
+}
+
+export async function listarConversaciones(): Promise<ConversacionRemota[]> {
+  const d = await llamar<{ conversaciones?: ConversacionRemota[] }>('conversaciones', { accion: 'listar' });
+  return Array.isArray(d.conversaciones) ? d.conversaciones : [];
+}
+
+export async function leerConversacion(id: string): Promise<ConversacionRemota | null> {
+  const d = await llamar<{ conversacion?: ConversacionRemota | null }>('conversaciones', { accion: 'leer', id });
+  return d.conversacion ?? null;
+}
+
+export async function guardarConversacionRemota(c: {
+  id: string;
+  titulo: string;
+  turnos: unknown[];
+  actualizada_en: number;
+}): Promise<void> {
+  await llamar('conversaciones', { accion: 'guardar', ...c });
+}
+
+export async function borrarConversacionRemota(id: string): Promise<void> {
+  await llamar('conversaciones', { accion: 'borrar', id });
+}
+
+export async function importarConversaciones(
+  conversaciones: { id: string; titulo: string; turnos: unknown[]; actualizada_en: number }[],
+): Promise<void> {
+  if (conversaciones.length === 0) return;
+  await llamar('conversaciones', { accion: 'importar', conversaciones });
+}

@@ -2,7 +2,7 @@
 #
 # Hace lo que antes había que correr a mano desde el repo:
 #   1. Aplicar una migración (por la Management API de Supabase).
-#   2. Desplegar las Edge Functions `buscar` y `facetas`.
+#   2. Desplegar las Edge Functions `buscar`, `facetas` y `conversaciones`.
 #   3. Cargar los vectores pendientes (`npm run embeber`).
 #   4. Probar la función en vivo.
 #
@@ -29,12 +29,12 @@ on:
   workflow_dispatch:
     inputs:
       migracion:
-        # La 0008 es idempotente (if not exists / create or replace): volver a
+        # La 0009 es idempotente (if not exists / create or replace): volver a
         # aplicarla no cambia nada, así que va por defecto y nadie tiene que
         # acordarse de escribirla. Para una migración nueva, cambiar aquí.
         description: 'Migración a aplicar (vacío = ninguna)'
         required: false
-        default: '0008_buscar_tambien_en_resumen.sql'
+        default: '0009_conversaciones.sql'
       desplegar:
         description: 'Desplegar las Edge Functions'
         type: boolean
@@ -140,6 +140,8 @@ jobs:
           # la función lee con service role (CLAUDE.md sección 6).
           supabase functions deploy buscar --project-ref "$PROJECT_REF" --no-verify-jwt
           supabase functions deploy facetas --project-ref "$PROJECT_REF" --no-verify-jwt
+          # `conversaciones` valida el JWT del usuario por su cuenta (auth.getUser).
+          supabase functions deploy conversaciones --project-ref "$PROJECT_REF" --no-verify-jwt
 
       - name: Probar en vivo
         if: github.event_name != 'schedule'
@@ -158,6 +160,10 @@ jobs:
                      (.resultados[:5][]? | "  - \(.titulo) · \(.fecha_pub)"),
                      (.error // empty | "  ERROR: \(.)")'
           done
+          echo "=== conversaciones sin sesión (debe decir NO_AUTENTICADO)"
+          curl -sS -m 30 -X POST "$SUPABASE_URL/functions/v1/conversaciones" \
+            -H "content-type: application/json" -H "apikey: $llave" -H "Authorization: Bearer $llave" \
+            --data '{"accion":"listar"}' | jq -c '.error // .'
 
   vectores:
     # Después del despliegue (la migración tiene que existir antes), o solo,

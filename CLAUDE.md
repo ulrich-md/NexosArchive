@@ -717,10 +717,14 @@ Medido el mismo día, ya con Haiku en producción:
   después lo secundario; nada de "no hay" si hubo pertinentes.
 - **La búsqueda por palabras no leía los resúmenes.** `ts` es título + autores +
   cuerpo, y el impreso de www no tiene cuerpo: para 1978–2005 solo se buscaba
-  en el título. La migración `0008_buscar_tambien_en_resumen.sql` agrega
-  `ts_meta` (columna generada: título A, resumen y temas B, con índice GIN) y
-  `buscar_articulos_hibrido` busca en `ts OR ts_meta` (BitmapOr de los dos
-  índices). `ts` no se toca: lleva cuerpos que no se guardan en ningún lado.
+  en el título. La migración `0008_buscar_tambien_en_resumen.sql` crea
+  `articulos_ts_meta` (título A, resumen y temas B, índice GIN, sincronizada
+  por trigger) y `buscar_articulos_hibrido` busca en `ts` y en `ts_meta`.
+  `ts` no se toca: lleva cuerpos que no se guardan en ningún lado. **El primer
+  intento fue una columna generada en `articulos` y la Management API la
+  canceló a los 2 minutos** (reescribir 33k filas con su GIN enorme); se
+  revirtió sola. Segunda vez la misma lección que con los vectores: lo
+  derivado va en tabla aparte, nunca como columna nueva de `articulos`.
 ---
 ## 5. Esquema
 ```sql

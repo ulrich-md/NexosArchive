@@ -7,23 +7,66 @@
 -- `resumen_linea` y `temas` —lo que el enriquecimiento escribió leyendo cada
 -- artículo— no entraban a ninguna búsqueda por palabras.
 --
+-- Primer intento, descartado: una columna generada en `articulos`. Agregarla
+-- reescribe las ~33k filas con todos sus índices (el GIN de `ts` es enorme) y
+-- la Management API la canceló a los 2 minutos ("statement timeout"; se
+-- revirtió entera, sin daño). Mismo patrón que los vectores (0007): tabla
+-- aparte, que se llena sin tocar `articulos`, y un trigger que la mantiene.
 -- `ts` no se toca: lleva el cuerpo de los subdominios, que no se guarda en
--- ninguna parte (0003) y no se podría reconstruir. Va una columna aparte,
--- generada de lo que sí está guardado, y la búsqueda mira las dos.
+-- ninguna parte (0003).
 --
 -- Idempotente.
 
-alter table articulos add column if not exists ts_meta tsvector
-  generated always as (
-    setweight(to_tsvector('spanish', coalesce(titulo, '')), 'A') ||
-    setweight(to_tsvector('spanish', coalesce(resumen_linea, '')), 'B') ||
-    setweight(to_tsvector('spanish', coalesce(autores_a_texto(temas), '')), 'B')
-  ) stored;
+create or replace function ts_meta_de(p_titulo text, p_resumen text, p_temas text[])
+  returns tsvector
+  language sql
+  immutable
+  parallel safe
+as $$
+  select setweight(to_tsvector('spanish', coalesce(p_titulo, '')), 'A') ||
+         setweight(to_tsvector('spanish', coalesce(p_resumen, '')), 'B') ||
+         setweight(to_tsvector('spanish', coalesce(array_to_string(p_temas, ' '), '')), 'B')
+$$;
 
-create index if not exists articulos_ts_meta_idx on articulos using gin (ts_meta);
+create table if not exists articulos_ts_meta (
+  id      bigint primary key references articulos(id) on delete cascade,
+  ts_meta tsvector not null
+);
+
+comment on table articulos_ts_meta is
+  'Texto buscable de título (A) + resumen_linea y temas (B). Lo mantiene un trigger sobre articulos.';
+
+alter table articulos_ts_meta enable row level security;
+revoke all on articulos_ts_meta from anon, authenticated;
+
+insert into articulos_ts_meta (id, ts_meta)
+select a.id, ts_meta_de(a.titulo, a.resumen_linea, a.temas)
+  from articulos a
+on conflict (id) do update set ts_meta = excluded.ts_meta;
+
+create index if not exists articulos_ts_meta_idx on articulos_ts_meta using gin (ts_meta);
+
+create or replace function articulos_sincronizar_ts_meta()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = public
+as $$
+begin
+  insert into articulos_ts_meta (id, ts_meta)
+  values (new.id, ts_meta_de(new.titulo, new.resumen_linea, new.temas))
+  on conflict (id) do update set ts_meta = excluded.ts_meta;
+  return null;
+end;
+$$;
+
+drop trigger if exists articulos_sincronizar_ts_meta on articulos;
+create trigger articulos_sincronizar_ts_meta
+  after insert or update of titulo, resumen_linea, temas on articulos
+  for each row execute function articulos_sincronizar_ts_meta();
 
 -- Misma firma y misma lógica que la 0007; solo cambia el texto que se busca:
--- `ts` (título, autores, cuerpo) o `ts_meta` (título, resumen, temas).
+-- `ts` (título, autores, cuerpo) más `ts_meta` (título, resumen, temas).
 create or replace function buscar_articulos_hibrido(
   p_texto           text     default null,
   p_embedding       extensions.halfvec default null,
@@ -72,9 +115,10 @@ begin
   return query
   with
   base as materialized (
-    select a.id, v.embedding, a.ts, a.ts_meta
+    select a.id, v.embedding, coalesce(a.ts, ''::tsvector) || coalesce(m.ts_meta, ''::tsvector) as ts
       from articulos a
       left join articulos_vectores v on v.id = a.id
+      left join articulos_ts_meta m on m.id = a.id
      where v_filtrado
        and (coalesce(cardinality(p_autores), 0) = 0 or a.autores && p_autores)
        and (p_anio_desde is null or a.anio_pub >= p_anio_desde)
@@ -105,19 +149,26 @@ begin
     select y.id, y.d,
            row_number() over (order by y.rk desc, y.id desc)::integer as r
       from (
-        (select b.id, ts_rank_cd(coalesce(b.ts, ''::tsvector) || b.ts_meta, v_q) as rk,
+        (select b.id, ts_rank_cd(b.ts, v_q) as rk,
                 case when p_embedding is not null then (b.embedding <=> p_embedding)::real end as d
            from base b
-          where v_filtrado and v_q is not null and (b.ts @@ v_q or b.ts_meta @@ v_q)
-          order by 2 desc
+          where v_filtrado and v_q is not null and b.ts @@ v_q
+          order by ts_rank_cd(b.ts, v_q) desc
           limit v_k)
         union all
-        (select a.id, ts_rank_cd(coalesce(a.ts, ''::tsvector) || a.ts_meta, v_q) as rk,
+        -- Sin filtro: los candidatos salen de los dos índices GIN (cuerpo y
+        -- resumen) y se ordenan por el texto completo de ambos.
+        (select a.id,
+                ts_rank_cd(coalesce(a.ts, ''::tsvector) || coalesce(m.ts_meta, ''::tsvector), v_q) as rk,
                 case when p_embedding is not null then
                   (select (vv.embedding <=> p_embedding)::real from articulos_vectores vv where vv.id = a.id)
                 end as d
            from articulos a
-          where not v_filtrado and v_q is not null and (a.ts @@ v_q or a.ts_meta @@ v_q)
+           left join articulos_ts_meta m on m.id = a.id
+          where not v_filtrado and v_q is not null
+            and a.id in (select x.id from articulos x where x.ts @@ v_q
+                         union
+                         select y.id from articulos_ts_meta y where y.ts_meta @@ v_q)
           order by 2 desc
           limit v_k)
       ) y

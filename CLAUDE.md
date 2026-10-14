@@ -671,8 +671,8 @@ Cuota gratuita de embeddings, medida (2026-10-14): **100 textos por minuto y
 1,000 al día** (`embed_content_free_tier_requests, limit: 1000`). Cuenta
 textos, no peticiones: un `batchEmbedContents` de 100 gasta 100. Sin
 facturación, los ~33k artículos tardan más de un mes; con facturación, una
-corrida. Ese 429 NO dice "per day" — se reconoce por `free_tier_requests` o
-por "retry in Nh" (`scripts/lib/embeddings.ts`). El workflow reintenta cada 6
+corrida. Ese 429 NO dice "per day" — se reconoce por "retry in Nh", una
+espera de horas (`scripts/lib/embeddings.ts`). El workflow reintenta cada 6
 horas.
 ---
 ## 5. Esquema

@@ -605,3 +605,15 @@ Deno.test('validarRespuesta: un id citado en el texto nunca se queda fuera por e
   assert(r.articulo_ids.includes(4));
   assert(r.texto.includes('[id:4]'));
 });
+
+Deno.test('sinDuplicados: el mismo artículo publicado dos veces sale una vez', async () => {
+  const { sinDuplicados } = await import('./carriles/comun.ts');
+  const filas = [
+    { id: 15134, titulo: 'La dicha de comer', autores: ['Charles Simic'], fecha_pub: '1993-02-01' },
+    { id: 9298, titulo: 'El último de los placeres. Lo divino', autores: ['Alma Guillermoprieto'], fecha_pub: '1999-06-01' },
+    { id: 6696, titulo: 'La dicha de comer', autores: ['Charles Simic'], fecha_pub: '1993-02-01' },
+    // Mismo título, otra fecha: es otro texto y se queda.
+    { id: 1, titulo: 'La dicha de comer', autores: ['Charles Simic'], fecha_pub: '2001-02-01' },
+  ];
+  assertEquals(sinDuplicados(filas).map((f) => f.id), [15134, 9298, 1]);
+});

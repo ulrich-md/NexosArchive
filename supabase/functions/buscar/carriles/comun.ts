@@ -42,6 +42,30 @@ export function aFiltrosAplicados(f: FiltrosConsulta): FiltrosAplicados {
   };
 }
 
+/**
+ * El WordPress de Nexos tiene artículos publicados dos veces: mismo título,
+ * firma y fecha con slug `-2` ("La dicha de comer", ids 6696 y 15134,
+ * 2026-10-27). La base los conserva —es el archivo tal cual y el conteo debe
+ * cuadrar con X-WP-Total—, pero en lo que se le da a leer al modelo y en las
+ * respuestas redactadas se deja solo el primero que llegue (el de mejor
+ * rango). Los listados de catálogo NO pasan por aquí: paginan sobre la base.
+ */
+export function sinDuplicados<T extends { titulo: string; autores?: string[] | null; fecha_pub: string }>(
+  filas: T[],
+): T[] {
+  const vistos = new Set<string>();
+  return filas.filter((f) => {
+    const clave = [
+      f.titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\W+/g, ' ').trim(),
+      [...(f.autores ?? [])].sort().join('|').toLowerCase(),
+      f.fecha_pub,
+    ].join('#');
+    if (vistos.has(clave)) return false;
+    vistos.add(clave);
+    return true;
+  });
+}
+
 export function hayFiltros(f: FiltrosConsulta): boolean {
   return f.autores.length > 0 || f.rango_pub !== null || f.anios_referidos.length > 0 ||
     f.temas.length > 0 || (f.texto !== null && f.texto !== '') || f.seccion !== null;

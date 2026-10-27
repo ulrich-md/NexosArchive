@@ -18,7 +18,7 @@ import { hayModelo, llamarConHerramienta } from '../llm.ts';
 import { normalizar } from '../texto.ts';
 import { ErrorBuscar, errorBd } from '../errores.ts';
 import { COLUMNAS_ARTICULO, type Aviso, type FilaArticulo, type PasoTraza } from '../tipos.ts';
-import { describirFiltros, type FiltrosConsulta } from './comun.ts';
+import { describirFiltros, sinDuplicados, type FiltrosConsulta } from './comun.ts';
 
 // --- ¿Ya se cargaron los vectores? ------------------------------------------
 
@@ -291,17 +291,18 @@ export async function buscarPorSignificado(
     for (const fila of (d ?? []) as unknown as FilaArticulo[]) filas.set(Number(fila.id), fila);
   }));
 
-  const candidatos: Candidato[] = [];
+  const conDuplicados: Candidato[] = [];
   for (const r of ranking) {
     const fila = filas.get(Number(r.id));
     if (!fila) continue;
-    candidatos.push({
+    conDuplicados.push({
       ...fila,
       por_significado: r.rango_vector !== null,
       por_palabras: r.rango_texto !== null,
       distancia: r.distancia,
     });
   }
+  const candidatos = sinDuplicados(conDuplicados);
 
   const nSignificado = candidatos.filter((c) => c.por_significado).length;
   const nPalabras = candidatos.filter((c) => c.por_palabras).length;

@@ -231,8 +231,13 @@ jobs:
           echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"
           export SUPABASE_SERVICE_ROLE_KEY
           npm ci --no-audit --no-fund
-          if [ -n "$VOYAGE_API_KEY" ]; then
-            # Voyage: sin cupo diario que repartir; todo lo pendiente de una vez.
+          if [ -n "$VOYAGE_API_KEY" ] && [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            # La corrida diaria solo trae los artículos nuevos o re-enriquecidos.
+            # Lotes de 40 (~6k tokens) caben en el límite de una cuenta de
+            # Voyage SIN método de pago (3 peticiones y 10k tokens por minuto).
+            npm run embeber -- --lote=40
+          elif [ -n "$VOYAGE_API_KEY" ]; then
+            # A mano: todo lo pendiente de una vez (con método de pago, minutos).
             npm run embeber
           else
             # Gemini: 850, no 1,000; el resto del cupo diario es para las

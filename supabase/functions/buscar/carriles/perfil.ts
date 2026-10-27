@@ -20,7 +20,7 @@ import { bd } from '../bd.ts';
 import { armarFichas } from '../fichas.ts';
 import { hayModelo } from '../llm.ts';
 import { COLUMNAS_ARTICULO, type FilaArticulo } from '../tipos.ts';
-import { buscarArticulos, type FiltrosConsulta, type ResultadoCarril } from './comun.ts';
+import { buscarArticulos, sinDuplicados, type FiltrosConsulta, type ResultadoCarril } from './comun.ts';
 import { redactar } from './redaccion.ts';
 
 const VIGENCIA_MS = 30 * 24 * 60 * 60 * 1000;
@@ -41,7 +41,7 @@ function claveDe(f: FiltrosConsulta): string {
  *  más vieja, así que se toman tramos a lo largo de ella. */
 async function muestra(f: FiltrosConsulta, total: number): Promise<FilaArticulo[]> {
   if (total <= PERFIL_MUESTRA) {
-    return (await buscarArticulos(f, { limite: total, conTotal: false })).filas;
+    return sinDuplicados((await buscarArticulos(f, { limite: total, conTotal: false })).filas);
   }
   const tramos = 6;
   const porTramo = Math.floor(PERFIL_MUESTRA / tramos);
@@ -51,7 +51,7 @@ async function muestra(f: FiltrosConsulta, total: number): Promise<FilaArticulo[
       buscarArticulos(f, { desde: i * paso, limite: porTramo, conTotal: false }).then((r) => r.filas)
     ),
   );
-  return partes.flat();
+  return sinDuplicados(partes.flat());
 }
 
 async function fichasPorId(ids: number[]): Promise<FilaArticulo[]> {

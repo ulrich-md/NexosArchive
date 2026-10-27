@@ -20,7 +20,7 @@ import { ErrorBuscar } from '../errores.ts';
 import { armarFichas } from '../fichas.ts';
 import { hayModelo } from '../llm.ts';
 import type { Aviso, Ficha, FilaArticulo, PasoTraza } from '../tipos.ts';
-import { aproximar, buscarArticulos, type FiltrosConsulta, type ResultadoCarril } from './comun.ts';
+import { aproximar, buscarArticulos, sinDuplicados, type FiltrosConsulta, type ResultadoCarril } from './comun.ts';
 import { redactar } from './redaccion.ts';
 import { buscarPorSignificado, textoDeBusqueda } from './significado.ts';
 
@@ -67,10 +67,10 @@ export async function carrilHibrida(
       avisos.push(...busqueda.avisos.filter((a) => a.codigo !== 'VECTORES_PENDIENTES'));
       pasos.push(...busqueda.pasosPrevios);
       const primero = new Set(busqueda.candidatos.map((c) => Number(c.id)));
-      candidatos = [
+      candidatos = sinDuplicados([
         ...busqueda.candidatos,
         ...obra.filas.filter((f) => !primero.has(Number(f.id))),
-      ];
+      ]);
       pasos.push({
         paso: 'sql',
         titulo: `Reunió toda la obra de ${filtros.autores.join(', ')}`,

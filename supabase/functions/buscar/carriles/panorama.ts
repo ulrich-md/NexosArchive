@@ -23,6 +23,7 @@ import {
   buscarArticulos,
   describirFiltros,
   hayFiltros,
+  sinDuplicados,
   type FiltrosConsulta,
   type ResultadoCarril,
 } from './comun.ts';
@@ -299,7 +300,7 @@ export async function carrilPanorama(
     };
   }
 
-  const filas = rec.filas.slice(0, PANORAMA_MAX_FILAS);
+  const filas = sinDuplicados(rec.filas).slice(0, PANORAMA_MAX_FILAS);
   const sinResumen = filas.every((f) => !f.resumen_linea);
   if (sinResumen) {
     avisos.push({

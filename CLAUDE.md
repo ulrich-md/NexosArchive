@@ -968,6 +968,30 @@ archivo son ~5M) y, con método de pago registrado, 8M tokens por minuto.
 - Las llaves nunca van en el chat ni en el repo: solo en los secretos de
   GitHub, que el workflow copia a la función.
 
+### Voyage en producción, duplicados de Nexos, autores en el texto (2026-10-27)
+
+- **Los 32,942 artículos tienen vector de Voyage** (dos corridas, ~12 min). La
+  primera se cortó a los 25,750: guardar 250 vectores en una sola llamada
+  rebasó los ~8 s de PostgREST con el índice HNSW ya grande. `embeber` guarda
+  de a 50 y reintenta los tiempos agotados. "artículos sobre comida" pasó a
+  traer 119 de 120 candidatos por significado, Suntory y Lotti incluidos.
+- **La corrida diaria funciona sin tarjeta en Voyage**: `--lote=40` cabe en el
+  límite de una cuenta sin método de pago (3 RPM / 10k TPM). La pregunta en vivo
+  gasta un vector de ~15 tokens. Si el dueño quita la tarjeta, más de 3
+  preguntas en el mismo minuto degradan a palabras con aviso; nada se rompe.
+- **Duplicados en las respuestas: vienen del WordPress de Nexos**, no de la
+  ingesta. "La dicha de comer" (Charles Simic) existe dos veces en www (ids
+  6696 y 15134, slugs `/la-dicha-de-comer/` y `/-2/`), mismo autor, fecha y
+  número. NO se borran (el archivo tal cual; el conteo cuadra con X-WP-Total):
+  `sinDuplicados()` (carriles/comun.ts, por título normalizado + autores +
+  fecha) los colapsa en lo que lee el modelo y en las respuestas redactadas.
+  Los listados de catálogo no pasan por ahí: paginan sobre la base.
+- **Autores nombrados en el texto redactado: decisión del dueño, se quedan.**
+  El prompt pide no nombrar autores salvo el preguntado, pero Haiku a veces los
+  nombra ("la pluma de Alma Guillermoprieto"). Son nombres reales de las fichas,
+  no inventados, y el dueño lo prefiere así: no agregar validación que los
+  quite.
+
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.
 ---

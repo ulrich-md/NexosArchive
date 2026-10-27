@@ -32,6 +32,7 @@ import {
 const PAUSA_MS = 300;
 const ESPERA_MINUTO_MS = 61_000;
 const MAX_REINTENTOS = 6;
+const GUARDAR_POR_LLAMADA = 50;
 
 function argNumero(nombre: string): number | null {
   const crudo = process.argv.find((a) => a.startsWith(`--${nombre}=`))?.split('=')[1];
@@ -117,16 +118,28 @@ for (;;) {
     }
   }
 
+  // Se guardan de a GUARDAR_POR_LLAMADA: con la tabla grande, insertar 250
+  // vectores en su índice HNSW rebasó los ~8 s que PostgREST da por sentencia
+  // (medido 2026-10-27, a los 25,750). Un tiempo agotado se reintenta: lo ya
+  // guardado no se repite (upsert por id).
   const filas = articulos.map((a, i) => ({ id: a.id, v: `[${vectores![i].join(',')}]` }));
-  const { error: errGuardar } = await bd.rpc('guardar_embeddings', { p_filas: filas });
-  if (errGuardar) {
-    console.error(
-      /dimensions|halfvec/i.test(errGuardar.message)
-        ? `\nLos vectores de ${MODELO_EMBEDDINGS} (${DIM_EMBEDDINGS}) no caben en la tabla: ` +
-          'con VOYAGE_API_KEY hay que aplicar antes supabase/migrations/0012_vectores_voyage.sql.'
-        : `\nError guardando vectores: ${errGuardar.message}`,
-    );
-    process.exit(1);
+  for (let i = 0; i < filas.length; i += GUARDAR_POR_LLAMADA) {
+    const tanda = filas.slice(i, i + GUARDAR_POR_LLAMADA);
+    for (let intento = 1; ; intento++) {
+      const { error: errGuardar } = await bd.rpc('guardar_embeddings', { p_filas: tanda });
+      if (!errGuardar) break;
+      if (/statement timeout/i.test(errGuardar.message) && intento < MAX_REINTENTOS) {
+        await dormir(2 ** intento * 1000);
+        continue;
+      }
+      console.error(
+        /dimensions|halfvec/i.test(errGuardar.message)
+          ? `\nLos vectores de ${MODELO_EMBEDDINGS} (${DIM_EMBEDDINGS}) no caben en la tabla: ` +
+            'con VOYAGE_API_KEY hay que aplicar antes supabase/migrations/0012_vectores_voyage.sql.'
+          : `\nError guardando vectores: ${errGuardar.message}`,
+      );
+      process.exit(1);
+    }
   }
 
   hechos += articulos.length;

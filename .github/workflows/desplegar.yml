@@ -31,12 +31,12 @@ on:
   workflow_dispatch:
     inputs:
       migracion:
-        # La 0010 es idempotente (if not exists / create or replace): volver a
+        # La 0011 es idempotente (if not exists / create or replace): volver a
         # aplicarla no cambia nada, así que va por defecto y nadie tiene que
         # acordarse de escribirla. Para una migración nueva, cambiar aquí.
         description: 'Migración a aplicar (vacío = ninguna)'
         required: false
-        default: '0010_sintesis_guardadas.sql'
+        default: '0011_busqueda_sin_filtro_acotada.sql'
       desplegar:
         description: 'Desplegar las Edge Functions'
         type: boolean

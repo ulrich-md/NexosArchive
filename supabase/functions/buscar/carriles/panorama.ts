@@ -104,8 +104,8 @@ async function recolectar(filtros: FiltrosConsulta): Promise<Recoleccion> {
       if (!(e instanceof ErrorBuscar) || e.codigo !== 'BUSQUEDA_HIBRIDA_NO_DISPONIBLE') throw e;
       pasos.push({
         paso: 'degradacion',
-        titulo: 'Búsqueda por significado no instalada',
-        detalle: e.detalle ?? e.message,
+        titulo: e.message,
+        detalle: e.detalle ?? '',
         ms: 0,
       });
     }

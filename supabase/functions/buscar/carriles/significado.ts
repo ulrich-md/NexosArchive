@@ -255,6 +255,16 @@ export async function buscarPorSignificado(
   });
   if (error) {
     if (esFaltaDeMigracion(error)) throw noDisponible(error);
+    // Pasarse del tiempo no es "el archivo falló": el llamador degrada a la
+    // búsqueda por palabras en vez de enseñarle al editor un error de base
+    // (medido el 2026-10-27 con "artículos sobre comida", antes de la 0011).
+    if (error.code === '57014' || /statement timeout/i.test(error.message ?? '')) {
+      throw new ErrorBuscar(
+        'BUSQUEDA_HIBRIDA_NO_DISPONIBLE',
+        'La búsqueda por significado tardó demasiado: se buscó por palabras exactas.',
+        { detalle: error.message, causa: error },
+      );
+    }
     throw errorBd('búsqueda por significado', error);
   }
   const ranking = (data ?? []) as FilaRpc[];

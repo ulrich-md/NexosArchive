@@ -907,6 +907,21 @@ panorama sin citas), a pedido.
   completa de Mastretta en cada despliegue; 16 despliegues en un día fueron
   casi todo el gasto). Ahora solo usa preguntas que no llaman al modelo.
 
+### Búsqueda sin filtros: timeout por ordenar cuerpos completos (2026-10-27)
+
+"artículos sobre comida" (sin autor ni años) respondía `BD_ERROR: canceling
+statement due to statement timeout`. La rama sin filtro de
+`buscar_articulos_hibrido` (0008) ordenaba TODAS las coincidencias por
+`ts || ts_meta`, lo que descomprime el cuerpo de cada una; con el tema
+ampliado y el choque "comida"/"cómo" eran miles de cuerpos. La migración
+`0011_busqueda_sin_filtro_acotada.sql` ordena por `ts_meta` (título, resumen,
+temas) y del cuerpo solo toma unos candidatos sin ordenarlos. Medido en local
+con 33k artículos sintéticos y cuerpos de ~1,500 palabras: 0.95 s → 0.27 s; la
+rama con autor no cambia (2 ms). Y si la búsqueda vuelve a pasarse del tiempo,
+`significado.ts` lo trata como `BUSQUEDA_HIBRIDA_NO_DISPONIBLE` (degrada a
+palabras exactas con aviso), no como error de base. Tercera vez la misma
+lección: nada que toque `ts` de `articulos` en masa.
+
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.
 ---

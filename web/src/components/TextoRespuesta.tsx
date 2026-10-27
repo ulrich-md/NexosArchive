@@ -1,5 +1,7 @@
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
+import { Puntos } from '@/components/Puntos';
 import type { Articulo } from '@/lib/contrato';
+import { useEscritura } from '@/lib/escritura';
 
 /**
  * Renderiza el texto redactado por el modelo.
@@ -15,15 +17,19 @@ import type { Articulo } from '@/lib/contrato';
 export function TextoRespuesta({
   texto,
   articulos,
+  cola,
 }: {
   texto: string;
   articulos: Articulo[];
+  /** Algo que va pegado al final del último párrafo (los puntos de "escribiendo"). */
+  cola?: ReactNode;
 }) {
   const porId = new Map(articulos.map((a) => [a.id, a]));
+  const parrafos = texto.split(/\n{2,}/);
 
   return (
     <div className="space-y-4 font-serif text-[17px] leading-relaxed text-foreground">
-      {texto.split(/\n{2,}/).map((parrafo, i) => (
+      {parrafos.map((parrafo, i) => (
         <p key={i}>
           {parrafo.split(/(\[id:\d+\])/g).map((trozo, j) => {
             const marca = trozo.match(/^\[id:(\d+)\]$/);
@@ -44,8 +50,36 @@ export function TextoRespuesta({
               </a>
             );
           })}
+          {i === parrafos.length - 1 ? cola : null}
         </p>
       ))}
     </div>
+  );
+}
+
+/**
+ * El mismo texto, escrito letra por letra con los tres puntos al final
+ * mientras falta (ver `lib/escritura.ts`). `enVivo` es la vista previa que
+ * llega mientras el modelo redacta; sin él, es la respuesta final, que retoma
+ * donde iba la vista previa.
+ */
+export function TextoEscrito({
+  texto,
+  articulos,
+  clave,
+  enVivo = false,
+}: {
+  texto: string;
+  articulos: Articulo[];
+  clave: string;
+  enVivo?: boolean;
+}) {
+  const { visible, escribiendo } = useEscritura(texto, clave, { enVivo, completo: !enVivo });
+  return (
+    <TextoRespuesta
+      texto={visible}
+      articulos={articulos}
+      cola={escribiendo ? <Puntos className="ml-1.5 align-middle" /> : null}
+    />
   );
 }

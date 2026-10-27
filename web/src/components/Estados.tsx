@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Clock, RotateCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TextoRespuesta } from '@/components/TextoRespuesta';
+import { Puntos } from '@/components/Puntos';
+import { TextoEscrito } from '@/components/TextoRespuesta';
+import { empezarEscritura } from '@/lib/escritura';
 import { ErrorConsulta } from '@/lib/api';
 import type { Articulo } from '@/lib/contrato';
 
@@ -19,20 +21,6 @@ const PASOS_ESPERA = [
   'Leyendo las fichas recuperadas',
   'Redactando la respuesta',
 ];
-
-function Puntos() {
-  return (
-    <span className="flex items-center gap-1" aria-hidden>
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="h-1.5 w-1.5 rounded-full bg-primary motion-safe:animar-pensando"
-          style={{ animationDelay: `${i * 160}ms` }}
-        />
-      ))}
-    </span>
-  );
-}
 
 // Ritmo pausado y gradual (~3 s por frase), como el "pensando" de un chat:
 // la frase anterior se funde en la siguiente en vez de saltar (pedido
@@ -64,28 +52,27 @@ function Pensando() {
 
 /** Esqueletos sobrios mientras carga, más el aviso si pasa de 10 s. */
 export function CargandoRespuesta({
+  clave,
   lento,
   onCancelar,
   vivo = null,
 }: {
+  clave: string;
   lento: boolean;
   onCancelar: () => void;
   vivo?: { texto: string; fichas: Articulo[] } | null;
 }) {
-  // Una marca a medio llegar ("[id:12") no se enseña: en el siguiente pedazo
-  // se completa y se vuelve el título con su liga.
-  const textoVivo = vivo?.texto.replace(/\[(?:i(?:d(?::\d*)?)?)?$/, '') ?? '';
+  useEffect(() => empezarEscritura(clave), [clave]);
+  const textoVivo = vivo?.texto ?? '';
+  const escribiendo = textoVivo.trim() !== '';
   return (
     <div className="space-y-5">
-      <Pensando />
+      {/* Ya escribiendo, los puntos al final del texto dicen lo mismo. */}
+      {escribiendo ? null : <Pensando />}
 
-      {textoVivo.trim() !== '' ? (
+      {escribiendo ? (
         <div className="max-w-4xl border-l-2 border-primary/40 pl-4 md:pl-5" aria-live="polite">
-          <TextoRespuesta texto={textoVivo} articulos={vivo?.fichas ?? []} />
-          <span
-            aria-hidden
-            className="mt-1 inline-block h-4 w-[2px] bg-primary align-middle motion-safe:animate-pulse"
-          />
+          <TextoEscrito texto={textoVivo} articulos={vivo?.fichas ?? []} clave={clave} enVivo />
         </div>
       ) : (
         <div className="max-w-4xl space-y-2 border-l-2 border-primary/40 pl-4 md:pl-5">

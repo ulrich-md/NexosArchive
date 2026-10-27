@@ -114,12 +114,14 @@
    ===================================================================== */
 @keyframes nx-pensando {
   0%,
-  80%,
+  60%,
   100% {
-    opacity: 0.25;
+    opacity: 0.3;
+    transform: translateY(0);
   }
-  40% {
+  30% {
     opacity: 1;
+    transform: translateY(-4px);
   }
 }
 

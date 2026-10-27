@@ -992,6 +992,19 @@ archivo son ~5M) y, con método de pago registrado, 8M tokens por minuto.
   no inventados, y el dueño lo prefiere así: no agregar validación que los
   quite.
 
+### Escritura letra por letra (2026-10-27)
+
+Pedido del dueño: que el texto salga poco a poco, "no todo de jalón", con
+tres puntitos moviéndose como en Claude. `lib/escritura.ts` (`useEscritura`)
+enseña el texto a un ritmo parejo (70–450 letras/s, más rápido si se acumula
+pendiente) aunque llegue a ráfagas o de golpe; una marca `[id:N]` aparece
+entera, ya como título. La vista previa y la respuesta final son componentes
+distintos: lo escrito se recuerda por turno y la final retoma ahí, sin volver
+a empezar. Solo se anima lo pedido en esta visita (una conversación reabierta
+se pinta completa) y nada con `prefers-reduced-motion`. Mientras escribe, los
+tres puntos (`components/Puntos.tsx`, ahora en ola) van al final del texto y
+reemplazan la línea de "Pensando".
+
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.
 ---

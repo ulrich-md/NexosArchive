@@ -3,7 +3,7 @@ import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-rea
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { FichaArticulo } from '@/components/FichaArticulo';
-import { TextoRespuesta } from '@/components/TextoRespuesta';
+import { TextoEscrito } from '@/components/TextoRespuesta';
 import { TrazaRecuperacion } from '@/components/TrazaRecuperacion';
 import { ArchivoVacio, CargandoRespuesta, ErrorRespuesta } from '@/components/Estados';
 import type { Articulo, RespuestaBuscar } from '@/lib/contrato';
@@ -144,7 +144,12 @@ export function BloqueRespuesta({
 
       {turno.estado === 'cargando' ? (
         <div className="mt-6 md:mt-8">
-          <CargandoRespuesta lento={turno.lento} onCancelar={onCancelar} vivo={turno.vivo ?? null} />
+          <CargandoRespuesta
+            clave={turno.id}
+            lento={turno.lento}
+            onCancelar={onCancelar}
+            vivo={turno.vivo ?? null}
+          />
         </div>
       ) : null}
 
@@ -158,7 +163,7 @@ export function BloqueRespuesta({
         // Un saludo o un "¿qué puedes hacer?": se contesta sin traza, sin
         // lista de artículos y sin liga a una búsqueda que no hubo.
         <div className="mt-6 md:mt-8">
-          <TextoRespuesta texto={r.respuesta ?? ''} articulos={[]} />
+          <TextoEscrito texto={r.respuesta ?? ''} articulos={[]} clave={turno.id} />
         </div>
       ) : turno.estado === 'lista' && r ? (
         r.archivo_vacio ? (
@@ -176,7 +181,11 @@ export function BloqueRespuesta({
                   <span className="px-1.5 text-border">·</span>
                   <span className="tabular">{conMiles(r.ms)} ms</span>
                 </p>
-                <TextoRespuesta texto={r.respuesta} articulos={[...r.articulos, ...(r.citadas ?? [])]} />
+                <TextoEscrito
+                  texto={r.respuesta}
+                  articulos={[...r.articulos, ...(r.citadas ?? [])]}
+                  clave={turno.id}
+                />
               </div>
             ) : null}
 

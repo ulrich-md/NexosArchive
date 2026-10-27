@@ -922,6 +922,30 @@ rama con autor no cambia (2 ms). Y si la búsqueda vuelve a pasarse del tiempo,
 palabras exactas con aviso), no como error de base. Tercera vez la misma
 lección: nada que toque `ts` de `articulos` en masa.
 
+### Respuesta en vivo y reclamos de seguimiento (2026-10-27)
+
+- **En vivo.** `buscar?en_vivo=1` responde Server-Sent Events (`en-vivo.ts`):
+  pedazos del texto mientras Haiku redacta, la ficha de cada `[id:N]` que
+  aparece (solo ids que se le dieron) y al final `final`, la MISMA respuesta
+  JSON validada de siempre, que es la que se queda en pantalla. La redacción
+  llega como JSON con esquema; `json-en-vivo.ts` saca el campo `texto` aunque
+  los pedazos partan llaves y escapes (prueba con todos los cortes de 1 a 7).
+  El emisor va en un `AsyncLocalStorage`: router y carriles no cambian. Si
+  Claude falla y responde Gemini, se emite `reinicio` y se empieza de cero.
+- **"faltan los de albrecht" se buscó como el tema «faltan».** Los reclamos
+  ("faltan", "no salió", "¿y los de X?") ahora abren la compuerta de
+  seguimiento, "falta(n)" es palabra vacía, y el prompt de reescritura dice
+  que un reclamo pide lo mismo que la pregunta anterior acotado a X.
+- **Recall en temas amplios.** "artículos sobre comida" no traía dos crónicas
+  de comida de Albrecht Mohrhardt Doger: solo 40 candidatas de 33k y una lista
+  de 15. Ahora 120 candidatas y hasta 40 en la lista (el texto cita las más
+  representativas).
+- **Huecos en el texto ("la memoria y , la historia").** El tope de ids podía
+  dejar fuera un id CITADO en el texto; su marca quedaba sin ficha. Ahora los
+  citados nunca se recortan. Y un título sin comillas solo se convierte en
+  cita si respeta mayúsculas y no está citado ya ("En [id:5] sobre la
+  alimentación" salía con el título dos veces).
+
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.
 ---

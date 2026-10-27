@@ -6,7 +6,7 @@ import { FichaArticulo } from '@/components/FichaArticulo';
 import { TextoRespuesta } from '@/components/TextoRespuesta';
 import { TrazaRecuperacion } from '@/components/TrazaRecuperacion';
 import { ArchivoVacio, CargandoRespuesta, ErrorRespuesta } from '@/components/Estados';
-import type { RespuestaBuscar } from '@/lib/contrato';
+import type { Articulo, RespuestaBuscar } from '@/lib/contrato';
 import { ErrorConsulta } from '@/lib/api';
 import { conMiles, urlBusquedaNexos } from '@/lib/utilidades';
 
@@ -20,6 +20,9 @@ export interface Turno {
   /** Cambiando de página: solo la lista de artículos se recarga, el resumen
    *  y la traza de esta misma respuesta se quedan quietos. */
   paginando: boolean;
+  /** Lo que Haiku lleva escrito mientras redacta (vista previa; la respuesta
+   *  definitiva es `respuesta`). */
+  vivo?: { texto: string; fichas: Articulo[] } | null;
 }
 
 function ListaArticulos({
@@ -141,7 +144,7 @@ export function BloqueRespuesta({
 
       {turno.estado === 'cargando' ? (
         <div className="mt-6 md:mt-8">
-          <CargandoRespuesta lento={turno.lento} onCancelar={onCancelar} />
+          <CargandoRespuesta lento={turno.lento} onCancelar={onCancelar} vivo={turno.vivo ?? null} />
         </div>
       ) : null}
 

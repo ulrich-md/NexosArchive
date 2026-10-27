@@ -250,8 +250,13 @@ export function quitarTitulosEscritos(texto: string, fichas: { id: number; titul
     // Entre comillas es una cita del título, sin duda.
     t = t.replace(new RegExp(`[«"“]${e}[»"”]`, 'giu'), `[id:${id}]`);
     // Sin comillas, solo si no puede ser una palabra normal: "Aforismos" es
-    // título de un artículo y también una palabra que el modelo usa.
-    if (limpio.length >= 12 && /\s/.test(limpio)) t = t.replace(new RegExp(e, 'giu'), `[id:${id}]`);
+    // título de un artículo y también una palabra que el modelo usa. Y con
+    // las mayúsculas del título y solo si el texto aún no lo cita: "En
+    // [id:5] sobre la alimentación…" no lleva otro título; "La alimentación"
+    // también es una frase común (medido 2026-10-27: salía dos veces).
+    if (limpio.length >= 12 && /\s/.test(limpio) && !t.includes(`[id:${id}]`)) {
+      t = t.replace(new RegExp(e, 'gu'), `[id:${id}]`);
+    }
   }
   return t
     .replace(/\[id:(\d+)\](?:\s*[,;:]?\s*\[id:\1\])+/g, '[id:$1]')
@@ -288,13 +293,18 @@ export function validarRespuesta(
     throw invalido('La respuesta viene vacía o es demasiado corta.');
   }
 
-  const ids: number[] = [];
+  const todos: number[] = [];
   const brutos = Array.isArray(crudo.articulo_ids) ? crudo.articulo_ids : [];
   for (const bruto of [...brutos, ...citados]) {
     const n = typeof bruto === 'number' ? bruto : Number.parseInt(String(bruto), 10);
-    if (Number.isInteger(n) && idsPermitidos.has(n) && !ids.includes(n)) ids.push(n);
-    if (ids.length >= op.maxIds) break;
+    if (Number.isInteger(n) && idsPermitidos.has(n) && !todos.includes(n)) todos.push(n);
   }
+  // El tope nunca deja fuera un texto citado: su marca se quedaría sin ficha y
+  // la frase con un hueco ("la memoria y , la historia", medido 2026-10-27).
+  // Se conserva el orden del modelo; lo que sobra sale de los no citados.
+  const citadosSet = new Set(citados);
+  let cupo = Math.max(0, op.maxIds - citadosSet.size);
+  const ids = todos.filter((id) => citadosSet.has(id) || cupo-- > 0);
 
   if (op.exigirIds && ids.length === 0) {
     throw invalido('La respuesta no quedó respaldada por ningún id real del archivo.');

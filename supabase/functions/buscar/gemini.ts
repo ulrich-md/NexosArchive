@@ -56,6 +56,9 @@ export interface OpcionesLlamada<T> {
   /** Se llama con el modelo que de verdad respondió, para trazas/UI que lo
    *  muestran — con rotación, no siempre es el primero de `modelos`. */
   onModelo?: (modelo: string) => void;
+  /** Solo Claude: recibe el JSON crudo conforme se genera, para enseñar la
+   *  respuesta en vivo. Gemini lo ignora (responde de un jalón). */
+  alTexto?: (pedazo: string) => void;
 }
 
 /**

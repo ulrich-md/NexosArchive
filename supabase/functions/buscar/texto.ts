@@ -26,6 +26,7 @@ export function tokens(s: string): string[] {
 
 /** Palabras vacías del español que no aportan al emparejamiento de nombres. */
 const VACIAS = new Set([
+  'falta', 'faltan', 'falto', 'faltaron', 'faltaria', 'faltarian', 'tambien', 'incluye', 'incluir',
   'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'en', 'a', 'que', 'sobre',
   'todo', 'toda', 'todos', 'todas', 'lo', 'un', 'una', 'unos', 'unas', 'por',
   'para', 'con', 'se', 'ha', 'han', 'su', 'sus', 'me', 'mi', 'nos', 'al',
@@ -220,6 +221,12 @@ const PATRON_SEGUIMIENTO = new RegExp(
     '\\b(el|la) (primero|primera|segundo|segunda|tercero|tercera|ultimo|ultima)\\b',
     // Pronombres que apuntan a la respuesta anterior.
     '\\b(esos|esas|ellos|ellas|ella|aquello|aquellos|dichos)\\b',
+    // Reclamos sobre la respuesta anterior: "faltan los de Albrecht", "no
+    // salió el del Suntory", "¿y los de Monsiváis?". Medido (2026-10-27):
+    // "faltan los de albrecht" se buscó como el tema «faltan».
+    '\\b(falta|faltan|falto|faltaron|faltaria|faltarian)\\b',
+    '\\bno (sale|salen|salio|salieron|aparece|aparecen|aparecio|incluiste|incluyes|pusiste|esta|estan)\\b',
+    '^(que hay de|que tal|y que hay de|tambien los de|tambien las de|los de|las de|el de|la de)\\b',
   ].join('|'),
 );
 

@@ -105,25 +105,37 @@ function traducirError(e: unknown): ErrorBuscar {
 export async function llamarClaude<T>(op: OpcionesLlamada<T>): Promise<T> {
   const c = obtenerCliente();
 
+  const parametros: Anthropic.MessageCreateParamsNonStreaming = {
+    model: MODELO_CLAUDE,
+    max_tokens: op.maxTokens,
+    system: op.sistema,
+    messages: [{ role: 'user', content: op.usuario }],
+    thinking: { type: 'disabled' },
+    output_config: {
+      effort: op.esfuerzo ?? 'low',
+      format: {
+        type: 'json_schema',
+        schema: aEsquemaClaude(op.herramienta.input_schema) as Record<string, unknown>,
+      },
+    },
+  };
+
   let respuesta: Anthropic.Message;
   try {
-    respuesta = await c.messages.create(
-      {
-        model: MODELO_CLAUDE,
-        max_tokens: op.maxTokens,
-        system: op.sistema,
-        messages: [{ role: 'user', content: op.usuario }],
-        thinking: { type: 'disabled' },
-        output_config: {
-          effort: op.esfuerzo ?? 'low',
-          format: {
-            type: 'json_schema',
-            schema: aEsquemaClaude(op.herramienta.input_schema) as Record<string, unknown>,
-          },
-        },
-      },
-      { timeout: op.timeoutMs },
-    );
+    if (op.alTexto) {
+      // En vivo: el JSON llega por pedazos y `alTexto` los va leyendo; la
+      // respuesta que se valida es la del mensaje completo, igual que sin
+      // transmisión.
+      const flujo = c.messages.stream(parametros, { timeout: op.timeoutMs });
+      for await (const evento of flujo) {
+        if (evento.type === 'content_block_delta' && evento.delta.type === 'text_delta') {
+          op.alTexto(evento.delta.text);
+        }
+      }
+      respuesta = await flujo.finalMessage();
+    } else {
+      respuesta = await c.messages.create(parametros, { timeout: op.timeoutMs });
+    }
   } catch (e) {
     throw traducirError(e);
   }

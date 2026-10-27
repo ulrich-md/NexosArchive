@@ -7,6 +7,7 @@
 // en otro proveedor: si un modelo declinó, se respeta y se dice.
 
 import { hayClaude, llamarClaude } from './claude.ts';
+import { emitir } from './en-vivo.ts';
 import { ErrorBuscar } from './errores.ts';
 import { hayModelo as hayGemini, llamarConHerramienta as llamarGemini, type OpcionesLlamada } from './gemini.ts';
 
@@ -25,6 +26,8 @@ export async function llamarConHerramienta<T>(op: OpcionesLlamada<T>): Promise<T
     const err = e instanceof ErrorBuscar ? e : null;
     if (!hayGemini() || err?.codigo === 'LLM_RECHAZO') throw e;
     console.warn(`[llm] Claude falló (${err?.codigo ?? 'error'}: ${err?.detalle ?? String(e)}); se intenta Gemini.`);
+    // Lo que ya se hubiera transmitido de Claude no vale: Gemini empieza de cero.
+    if (op.alTexto) emitir({ t: 'reinicio' });
     return await llamarGemini(op);
   }
 }

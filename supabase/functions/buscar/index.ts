@@ -31,6 +31,7 @@ import { detectaSeguimiento, detectarCharla, quitarCortesia } from './texto.ts';
 import { responderCharla } from './charla.ts';
 import { validarFiltrosEco } from './validacion.ts';
 import { conPerfil } from './carriles/perfil.ts';
+import { responderEnVivo } from './en-vivo.ts';
 import { carrilCatalogo, normalizarPaginacion } from './carriles/catalogo.ts';
 import { carrilPanorama } from './carriles/panorama.ts';
 import { carrilHibrida } from './carriles/hibrida.ts';
@@ -376,7 +377,16 @@ function armarRespuesta(
   };
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve((req: Request) => {
+  // `?en_vivo=1`: la misma consulta, pero el texto se transmite mientras
+  // Haiku lo escribe (en-vivo.ts) y al final llega la respuesta de siempre.
+  if (req.method === 'POST' && new URL(req.url).searchParams.get('en_vivo') === '1') {
+    return responderEnVivo(() => responder(req), encabezadosCors(req));
+  }
+  return responder(req);
+});
+
+async function responder(req: Request): Promise<Response> {
   const t0 = performance.now();
   // La traza y los avisos viven fuera del manejador para que un error a mitad
   // de camino igual le enseñe al editor hasta dónde llegó la consulta.
@@ -415,4 +425,4 @@ Deno.serve(async (req: Request) => {
     }
     return respuestaError(err, req, traza, avisos, performance.now() - t0);
   }
-});
+}

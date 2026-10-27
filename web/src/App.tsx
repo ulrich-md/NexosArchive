@@ -7,7 +7,15 @@ import { CajaConsulta } from '@/components/CajaConsulta';
 import { LogoNexos } from '@/components/LogoNexos';
 import { PanelReposo } from '@/components/PanelReposo';
 import { Button } from '@/components/ui/button';
-import { ErrorConsulta, MS_AVISO_LENTO, MS_LIMITE, buscar, facetas as pedirFacetas } from '@/lib/api';
+import {
+  ErrorConsulta,
+  MS_AVISO_LENTO,
+  MS_LIMITE,
+  buscar,
+  buscarEnVivo,
+  facetas as pedirFacetas,
+  type EventoEnVivo,
+} from '@/lib/api';
 import type { RespuestaFacetas } from '@/lib/contrato';
 import { MS_MIN_PENSANDO } from '@/lib/constantes';
 import {
@@ -233,13 +241,30 @@ export default function App() {
         // el "Pensando" se reemplazaría por los resultados casi de inmediato.
         // Un error NO espera este piso — Promise.all rechaza apenas rechaza
         // cualquiera de las dos, así que una falla se muestra de inmediato.
+        // El texto se enseña conforme Haiku lo escribe; lo que queda al
+        // final es la respuesta completa y validada.
+        const alEvento = (e: EventoEnVivo) => {
+          setTurnos((ts) =>
+            ts.map((t) => {
+              if (t.id !== idTurno) return t;
+              const previo = t.vivo ?? { texto: '', fichas: [] };
+              if (e.t === 'reinicio') return { ...t, vivo: { texto: '', fichas: [] } };
+              if (e.t === 'ficha') {
+                return previo.fichas.some((f) => f.id === e.f.id)
+                  ? t
+                  : { ...t, vivo: { ...previo, fichas: [...previo.fichas, e.f] } };
+              }
+              return { ...t, lento: false, vivo: { ...previo, texto: previo.texto + e.d } };
+            }),
+          );
+        };
         const [respuesta] = await Promise.all([
-          buscar({ pregunta, pregunta_anterior: preguntaAnterior }, control.signal),
+          buscarEnVivo({ pregunta, pregunta_anterior: preguntaAnterior }, control.signal, alEvento),
           new Promise((resolve) => window.setTimeout(resolve, MS_MIN_PENSANDO)),
         ]);
         setTurnos((ts) =>
           ts.map((t) =>
-            t.id === idTurno ? { ...t, estado: 'lista', lento: false, respuesta } : t,
+            t.id === idTurno ? { ...t, estado: 'lista', lento: false, respuesta, vivo: null } : t,
           ),
         );
         // Solo AQUÍ se vacía el input: hubo respuesta.
@@ -259,7 +284,7 @@ export default function App() {
             : new ErrorConsulta('desconocido', 'No se pudo consultar el archivo.');
 
         setTurnos((ts) =>
-          ts.map((t) => (t.id === idTurno ? { ...t, estado: 'error', lento: false, error } : t)),
+          ts.map((t) => (t.id === idTurno ? { ...t, estado: 'error', lento: false, error, vivo: null } : t)),
         );
         // El texto NO se toca: la pregunta sigue en el input para reintentar.
       } finally {

@@ -12,6 +12,9 @@ import { MAX_TOKENS_SINTESIS, MODELOS_GEMINI, TIMEOUT_SINTESIS_MS } from '../con
 import { llamarConHerramienta } from '../llm.ts';
 import { escaparParaPrompt } from '../texto.ts';
 import { ESQUEMA_RESPUESTA, validarRespuesta } from '../validacion.ts';
+import { emitir, hayEmisor } from '../en-vivo.ts';
+import { armarFicha } from '../fichas.ts';
+import { LectorCampoJson } from '../json-en-vivo.ts';
 import type { FilaArticulo } from '../tipos.ts';
 
 export type Estilo = 'panorama' | 'directa' | 'perfil';
@@ -86,7 +89,8 @@ const SISTEMA: Record<Estilo, string> = {
     '- Si encontraste textos pertinentes, no digas que el archivo "no tiene" textos del tema',
     '  aunque ninguno sea central.',
     '- No des consejos al editor sobre cómo buscar ni le pidas revisar fichas.',
-    '- En articulo_ids pon los pertinentes, del más al menos pertinente.',
+    '- En articulo_ids pon TODOS los pertinentes, del más al menos pertinente, aunque en el',
+    '  texto solo cites los más representativos: articulo_ids es la lista que ve el editor.',
     '- Solo si ninguna ficha tiene relación con la pregunta, dilo en una o dos frases y deja',
     '  articulo_ids vacío.',
     '',
@@ -111,6 +115,34 @@ export function bloqueArchivo(filas: FilaArticulo[]): string {
     return `<ficha ${atributos}>${cuerpo}</ficha>`;
   });
   return `<archivo>\n${lineas.join('\n')}\n</archivo>`;
+}
+
+/**
+ * Lo que el editor ve mientras el modelo escribe: el texto de la respuesta y,
+ * para cada marca [id:N] de una ficha que SÍ se le dio, esa ficha, para que la
+ * interfaz pinte el título real con su liga. Un id inventado no trae ficha y
+ * no se pinta, igual que en la respuesta final.
+ */
+function transmisor(filas: FilaArticulo[]): (pedazo: string) => void {
+  const porId = new Map(filas.map((f) => [Number(f.id), f]));
+  const lector = new LectorCampoJson('texto');
+  const vistos = new Set<number>();
+  let acumulado = '';
+  return (pedazo) => {
+    const nuevo = lector.agregar(pedazo);
+    if (!nuevo) return;
+    // Solo la cola puede completar una marca partida entre dos pedazos.
+    const desde = Math.max(0, acumulado.length - 24);
+    acumulado += nuevo;
+    for (const m of acumulado.slice(desde).matchAll(/\[id:(\d+)\]/g)) {
+      const id = Number(m[1]);
+      if (vistos.has(id)) continue;
+      vistos.add(id);
+      const fila = porId.get(id);
+      if (fila) emitir({ t: 'ficha', f: armarFicha(fila) });
+    }
+    emitir({ t: 'texto', d: nuevo });
+  };
 }
 
 export interface Redaccion {
@@ -138,6 +170,7 @@ export async function redactar(
 
   let modeloUsado = MODELOS_GEMINI[0];
   const r = await llamarConHerramienta({
+    alTexto: hayEmisor() ? transmisor(filas) : undefined,
     modelos: MODELOS_GEMINI,
     sistema: SISTEMA[estilo],
     usuario,

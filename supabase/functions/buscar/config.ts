@@ -116,7 +116,11 @@ export const MODELO_EMBEDDINGS = env('MODELO_EMBEDDINGS') ?? 'gemini-embedding-0
 export const DIM_EMBEDDINGS = 768;
 export const TIMEOUT_EMBEDDING_MS = entero('TIMEOUT_EMBEDDING_MS', 5_000);
 /** Candidatos que la búsqueda híbrida le pasa al modelo para elegir y redactar. */
-export const HIBRIDA_CANDIDATOS = entero('HIBRIDA_CANDIDATOS', 40);
+// 40 se quedaba corto en temas amplios: con "artículos sobre comida", dos
+// crónicas de comida de Albrecht Mohrhardt Doger ("Aprender a comer en el
+// Suntory", "Desayunos en Lotti") no llegaban ni a candidatas (2026-10-27).
+// 120 fichas son ~13k tokens: poco más de un décimo de centavo con Haiku.
+export const HIBRIDA_CANDIDATOS = entero('HIBRIDA_CANDIDATOS', 120);
 /** Fichas que se enseñan si el modelo no pudo redactar (orden por RRF). */
 export const HIBRIDA_SIN_REDACCION = 8;
 /**
@@ -130,7 +134,8 @@ export const LECTURA_AUTOR_MAX = entero('LECTURA_AUTOR_MAX', 1000);
  *  (carriles/perfil.ts): ~20k tokens, unas décimas de centavo con Haiku. */
 export const PERFIL_MUESTRA = entero('PERFIL_MUESTRA', 240);
 /** Máximo de fichas citadas en una respuesta directa. */
-export const HIBRIDA_MAX_CITADAS = 15;
+/** Cuántos textos puede dejar en la lista (no cuántos cita en el texto). */
+export const HIBRIDA_MAX_CITADAS = 40;
 /**
  * Distancia coseno máxima para que un artículo que llegó SOLO por el vector
  * cuente como candidato (lo que también trae las palabras entra siempre). El

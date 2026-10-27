@@ -555,3 +555,53 @@ Deno.test('rangoReferido: "el 68" es 1968 y los años anteriores a la revista cu
   // Los años de publicación siguen empezando con la revista.
   assertEquals(rangoPublicacion('¿Qué se ha escrito sobre 1968?'), null);
 });
+
+Deno.test('LectorCampoJson: saca el texto en vivo aunque los pedazos partan llaves y escapes', async () => {
+  const { LectorCampoJson } = await import('./json-en-vivo.ts');
+  const json = JSON.stringify({
+    texto: 'Mastretta escribe sobre la cocina: «mole», \"sazón\"\nEn [id:12] narra… y \\ también á',
+    articulo_ids: [12],
+  });
+  // Todas las formas de partirlo en pedazos de 1 a 7 caracteres.
+  for (let tam = 1; tam <= 7; tam++) {
+    const lector = new LectorCampoJson('texto');
+    let salida = '';
+    for (let i = 0; i < json.length; i += tam) salida += lector.agregar(json.slice(i, i + tam));
+    assertEquals(salida, JSON.parse(json).texto);
+  }
+  // Escape unicode explícito partido a la mitad.
+  const l = new LectorCampoJson('texto');
+  assertEquals(l.agregar('{"texto": "ca\\u00') + l.agregar('e1n"'), 'caán');
+});
+
+Deno.test('Reclamos sobre la respuesta anterior siguen el hilo (caso real 2026-10-27)', async () => {
+  const { detectaSeguimiento, temaResidual } = await import('./texto.ts');
+  assert(detectaSeguimiento('faltan los de albrecht'));
+  assert(detectaSeguimiento('no salió el del Suntory'));
+  assert(detectaSeguimiento('¿Qué hay de Monsiváis?'));
+  assert(!detectaSeguimiento('La desaparición de Ayotzinapa'));
+  assertEquals(temaResidual('faltan los de albrecht', []), 'albrecht');
+});
+
+Deno.test('Títulos sin comillas: no se duplica el que ya está citado ni se toma una frase común', () => {
+  const fichas = [{ id: 5, titulo: 'La alimentación' }, { id: 7, titulo: 'Una comida en La Condesa' }];
+  assertEquals(
+    quitarTitulosEscritos('En [id:5] escribe sobre la alimentación y el apetito.', fichas),
+    'En [id:5] escribe sobre la alimentación y el apetito.',
+  );
+  assertEquals(
+    quitarTitulosEscritos('La crónica Una comida en La Condesa retrata la colonia.', fichas),
+    'La crónica [id:7] retrata la colonia.',
+  );
+});
+
+Deno.test('validarRespuesta: un id citado en el texto nunca se queda fuera por el tope', () => {
+  const ids = new Set([1, 2, 3, 4]);
+  const r = validarRespuesta(
+    { texto: 'Hay mucho en el archivo: la memoria y [id:4], la historia en [id:1].', articulo_ids: [1, 2, 3] },
+    ids,
+    { exigirIds: false, maxIds: 2 },
+  );
+  assert(r.articulo_ids.includes(4));
+  assert(r.texto.includes('[id:4]'));
+});

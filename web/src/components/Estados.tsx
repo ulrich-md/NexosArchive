@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Clock, RotateCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TextoRespuesta } from '@/components/TextoRespuesta';
 import { ErrorConsulta } from '@/lib/api';
+import type { Articulo } from '@/lib/contrato';
 
 /**
  * Estados visibles (sección 3, mejora 1).
@@ -64,19 +66,34 @@ function Pensando() {
 export function CargandoRespuesta({
   lento,
   onCancelar,
+  vivo = null,
 }: {
   lento: boolean;
   onCancelar: () => void;
+  vivo?: { texto: string; fichas: Articulo[] } | null;
 }) {
+  // Una marca a medio llegar ("[id:12") no se enseña: en el siguiente pedazo
+  // se completa y se vuelve el título con su liga.
+  const textoVivo = vivo?.texto.replace(/\[(?:i(?:d(?::\d*)?)?)?$/, '') ?? '';
   return (
     <div className="space-y-5">
       <Pensando />
 
-      <div className="max-w-4xl space-y-2 border-l-2 border-primary/40 pl-4 md:pl-5">
-        <Skeleton className="h-4 w-full" retraso={0} />
-        <Skeleton className="h-4 w-11/12" retraso={120} />
-        <Skeleton className="h-4 w-3/5" retraso={240} />
-      </div>
+      {textoVivo.trim() !== '' ? (
+        <div className="max-w-4xl border-l-2 border-primary/40 pl-4 md:pl-5" aria-live="polite">
+          <TextoRespuesta texto={textoVivo} articulos={vivo?.fichas ?? []} />
+          <span
+            aria-hidden
+            className="mt-1 inline-block h-4 w-[2px] bg-primary align-middle motion-safe:animate-pulse"
+          />
+        </div>
+      ) : (
+        <div className="max-w-4xl space-y-2 border-l-2 border-primary/40 pl-4 md:pl-5">
+          <Skeleton className="h-4 w-full" retraso={0} />
+          <Skeleton className="h-4 w-11/12" retraso={120} />
+          <Skeleton className="h-4 w-3/5" retraso={240} />
+        </div>
+      )}
 
       <div className="max-w-4xl space-y-3 rounded-lg border border-border bg-surface p-4">
         {[0, 1, 2].map((i) => (

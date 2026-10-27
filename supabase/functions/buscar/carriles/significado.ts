@@ -258,6 +258,16 @@ export async function buscarPorSignificado(
     // Pasarse del tiempo no es "el archivo falló": el llamador degrada a la
     // búsqueda por palabras en vez de enseñarle al editor un error de base
     // (medido el 2026-10-27 con "artículos sobre comida", antes de la 0011).
+    // Llave de Voyage puesta y migración 0012 sin aplicar (o al revés): el
+    // vector de la pregunta no mide lo mismo que los guardados. Se busca por
+    // palabras en vez de tumbar la consulta.
+    if (/different (half)?vec(tor)? dimensions|expected \d+ dimensions/i.test(error.message ?? '')) {
+      throw new ErrorBuscar(
+        'BUSQUEDA_HIBRIDA_NO_DISPONIBLE',
+        'La búsqueda por significado se está actualizando: se buscó por palabras exactas.',
+        { detalle: error.message, causa: error },
+      );
+    }
     if (error.code === '57014' || /statement timeout/i.test(error.message ?? '')) {
       throw new ErrorBuscar(
         'BUSQUEDA_HIBRIDA_NO_DISPONIBLE',

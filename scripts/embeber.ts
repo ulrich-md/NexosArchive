@@ -45,6 +45,9 @@ function argNumero(nombre: string): number | null {
 }
 
 const limite = argNumero('limite');
+// Textos por petición. Sin método de pago, Voyage limita mucho los tokens por
+// minuto: `--lote=50` evita que cada petición rebase el límite.
+const lote = Math.min(argNumero('lote') ?? MAX_POR_PETICION, MAX_POR_PETICION);
 const seco = process.argv.includes('--seco');
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -73,7 +76,7 @@ let peticiones = 0;
 const t0 = Date.now();
 
 for (;;) {
-  const tope = limite === null ? MAX_POR_PETICION : Math.min(MAX_POR_PETICION, limite - hechos);
+  const tope = limite === null ? lote : Math.min(lote, limite - hechos);
   if (tope <= 0) break;
 
   // Por id ascendente y con cursor: un artículo que fallara siempre no puede
@@ -83,14 +86,14 @@ for (;;) {
     console.error(`Error leyendo artículos: ${error.message}`);
     process.exit(1);
   }
-  const lote = (data ?? []) as ArticuloParaVector[];
-  if (lote.length === 0) break;
+  const articulos = (data ?? []) as ArticuloParaVector[];
+  if (articulos.length === 0) break;
 
   let vectores: number[][] | null = null;
   for (let intento = 1; vectores === null; intento++) {
     try {
       peticiones++;
-      vectores = await embeberLote(lote.map((a) => ({ texto: textoParaVector(a), titulo: a.titulo })));
+      vectores = await embeberLote(articulos.map((a) => ({ texto: textoParaVector(a), titulo: a.titulo })));
     } catch (e) {
       const err = e as ErrorEmbeddings;
       if (err.fatal) {
@@ -114,15 +117,20 @@ for (;;) {
     }
   }
 
-  const filas = lote.map((a, i) => ({ id: a.id, v: `[${vectores![i].join(',')}]` }));
+  const filas = articulos.map((a, i) => ({ id: a.id, v: `[${vectores![i].join(',')}]` }));
   const { error: errGuardar } = await bd.rpc('guardar_embeddings', { p_filas: filas });
   if (errGuardar) {
-    console.error(`\nError guardando vectores: ${errGuardar.message}`);
+    console.error(
+      /dimensions|halfvec/i.test(errGuardar.message)
+        ? `\nLos vectores de ${MODELO_EMBEDDINGS} (${DIM_EMBEDDINGS}) no caben en la tabla: ` +
+          'con VOYAGE_API_KEY hay que aplicar antes supabase/migrations/0012_vectores_voyage.sql.'
+        : `\nError guardando vectores: ${errGuardar.message}`,
+    );
     process.exit(1);
   }
 
-  hechos += lote.length;
-  ultimoId = lote[lote.length - 1].id;
+  hechos += articulos.length;
+  ultimoId = articulos[articulos.length - 1].id;
   const seg = (Date.now() - t0) / 1000;
   process.stdout.write(
     `\r${hechos.toLocaleString('es-MX')} / ${(limite ?? pendientes ?? 0).toLocaleString('es-MX')} ` +

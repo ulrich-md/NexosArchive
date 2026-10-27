@@ -6,10 +6,16 @@ import './red.js';
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-export const MODELO_EMBEDDINGS = process.env.MODELO_EMBEDDINGS ?? 'gemini-embedding-001';
-export const DIM_EMBEDDINGS = 768;
-/** Tope de la API por petición de batchEmbedContents. */
-export const MAX_POR_PETICION = 100;
+// Con VOYAGE_API_KEY en el entorno, el proveedor es Voyage AI (`voyage-4`,
+// 1024, migración 0012); sin ella, Gemini (768). La Edge Function decide con
+// la misma regla, así que pregunta y artículos siempre salen del mismo modelo.
+export const USA_VOYAGE = Boolean(process.env.VOYAGE_API_KEY);
+export const MODELO_EMBEDDINGS = USA_VOYAGE
+  ? (process.env.MODELO_VOYAGE ?? 'voyage-4')
+  : (process.env.MODELO_EMBEDDINGS ?? 'gemini-embedding-001');
+export const DIM_EMBEDDINGS = USA_VOYAGE ? 1024 : 768;
+/** Textos por petición: Gemini acepta 100; Voyage, 1,000 y 320k tokens. */
+export const MAX_POR_PETICION = USA_VOYAGE ? 250 : 100;
 
 export interface ArticuloParaVector {
   id: number;
@@ -43,10 +49,53 @@ export interface ErrorEmbeddings extends Error {
   fatal?: boolean;
 }
 
-/** Una petición de hasta 100 textos. Devuelve un vector por texto, en orden. */
+/** Una petición de hasta MAX_POR_PETICION textos. Un vector por texto, en orden. */
 export async function embeberLote(
   textos: { texto: string; titulo: string }[],
 ): Promise<number[][]> {
+  return USA_VOYAGE ? await conVoyage(textos) : await conGemini(textos);
+}
+
+async function conVoyage(textos: { texto: string; titulo: string }[]): Promise<number[][]> {
+  const res = await fetch('https://api.voyageai.com/v1/embeddings', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${process.env.VOYAGE_API_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      // El título ya va en la primera línea de cada texto (textoParaVector).
+      input: textos.map((t) => t.texto),
+      model: MODELO_EMBEDDINGS,
+      // Documento contra pregunta: la Edge Function usa 'query'.
+      input_type: 'document',
+      output_dimension: DIM_EMBEDDINGS,
+    }),
+    signal: AbortSignal.timeout(90_000),
+  });
+  if (!res.ok) {
+    const cuerpo = (await res.text().catch(() => '')).slice(0, 500);
+    const err: ErrorEmbeddings = new Error(`HTTP ${res.status}: ${cuerpo}`);
+    err.status = res.status;
+    err.fatal = res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404;
+    throw err;
+  }
+  const json = (await res.json()) as { data?: { embedding?: number[]; index?: number }[] };
+  const datos = [...(json.data ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  const vectores = datos.map((d) => d.embedding ?? []);
+  return comprobar(vectores, textos.length);
+}
+
+function comprobar(vectores: number[][], esperados: number): number[][] {
+  if (vectores.length !== esperados || vectores.some((v) => v.length !== DIM_EMBEDDINGS)) {
+    const err: ErrorEmbeddings = new Error(
+      `Respuesta inesperada: ${vectores.length} vectores para ${esperados} textos, ` +
+        `se esperaban ${DIM_EMBEDDINGS} dimensiones.`,
+    );
+    err.fatal = true;
+    throw err;
+  }
+  return vectores;
+}
+
+async function conGemini(textos: { texto: string; titulo: string }[]): Promise<number[][]> {
   const llave = process.env.GEMINI_API_KEY;
   if (!llave) {
     const err: ErrorEmbeddings = new Error('Falta GEMINI_API_KEY en el entorno (ver .env.example).');
@@ -89,14 +138,5 @@ export async function embeberLote(
   }
 
   const json = (await res.json()) as { embeddings?: { values?: number[] }[] };
-  const vectores = (json.embeddings ?? []).map((e) => e.values ?? []);
-  if (vectores.length !== textos.length || vectores.some((v) => v.length !== DIM_EMBEDDINGS)) {
-    const err: ErrorEmbeddings = new Error(
-      `Respuesta inesperada: ${vectores.length} vectores para ${textos.length} textos, ` +
-        `se esperaban ${DIM_EMBEDDINGS} dimensiones.`,
-    );
-    err.fatal = true;
-    throw err;
-  }
-  return vectores;
+  return comprobar((json.embeddings ?? []).map((e) => e.values ?? []), textos.length);
 }

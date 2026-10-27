@@ -946,6 +946,28 @@ lección: nada que toque `ts` de `articulos` en masa.
   cita si respeta mayúsculas y no está citado ya ("En [id:5] sobre la
   alimentación" salía con el título dos veces).
 
+### Vectores con Voyage AI, listos para activarse (2026-10-27)
+
+Gemini da 1,000 embeddings gratis al día, compartidos entre la carga y las
+preguntas: el 27 de octubre faltaban 20,092 artículos (~3½ semanas a 850/día).
+Voyage AI (`voyage-4`, 1024 dimensiones) da 200M tokens gratis por cuenta (el
+archivo son ~5M) y, con método de pago registrado, 8M tokens por minuto.
+
+- **El interruptor es el secreto `VOYAGE_API_KEY`.** Con él, la función
+  (`embeddings.ts`, `input_type: 'query'`) y `npm run embeber`
+  (`input_type: 'document'`, lotes de 250, sin tope diario) usan Voyage; sin
+  él, todo sigue con Gemini.
+- **La migración `0012_vectores_voyage.sql` va junto con la llave, a
+  propósito, y NO es la migración por defecto del workflow** (que además se
+  niega a aplicarla sin el secreto). Renombra la tabla de Gemini a
+  `articulos_vectores_gemini` (respaldo, con instrucciones para volver) y crea
+  `articulos_vectores` en `halfvec(1024)`; las RPC la encuentran por nombre.
+- Si llave y migración no coinciden, la RPC truena con `different halfvec
+  dimensions`: `significado.ts` lo trata como búsqueda por palabras con aviso,
+  y `embeber` lo explica en vez de un error crudo.
+- Las llaves nunca van en el chat ni en el repo: solo en los secretos de
+  GitHub, que el workflow copia a la función.
+
 **Security score objetivo:** MVP 7/10, producción 8.5/10.
 Baja a 3/10 si el cliente consulta las tablas directo — que es el default de estas herramientas.
 ---

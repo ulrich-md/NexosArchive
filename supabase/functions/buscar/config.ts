@@ -106,14 +106,21 @@ export const ORIGENES_PERMITIDOS = (env('ORIGENES_PERMITIDOS') ?? '*')
 
 // --- Búsqueda por significado ----------------------------------------------
 /**
- * Un vector por artículo (título + autores + sección + temas + resumen), con
- * el mismo proveedor que ya paga todo lo demás: Gemini, con la misma llave.
+ * Un vector por artículo (título + autores + sección + temas + resumen).
  * Tiene que ser EXACTAMENTE el modelo y la dimensión con que `npm run
- * embeber` llenó la columna (`halfvec(768)`, migración 0006): un vector de
- * otro modelo no es comparable aunque mida lo mismo.
+ * embeber` llenó `articulos_vectores`: un vector de otro modelo no es
+ * comparable aunque mida lo mismo.
+ *
+ * Con el secreto VOYAGE_API_KEY el proveedor es Voyage (`voyage-4`, 1024,
+ * migración 0012); sin él, Gemini (768, migraciones 0006/0007). La llave y la
+ * migración se ponen juntas: ver 0012.
  */
+export const voyageApiKey = () => env('VOYAGE_API_KEY');
+export const usaVoyage = () => Boolean(voyageApiKey());
+export const MODELO_VOYAGE = env('MODELO_VOYAGE') ?? 'voyage-4';
 export const MODELO_EMBEDDINGS = env('MODELO_EMBEDDINGS') ?? 'gemini-embedding-001';
-export const DIM_EMBEDDINGS = 768;
+export const dimEmbeddings = () => (usaVoyage() ? 1024 : 768);
+export const modeloEmbeddings = () => (usaVoyage() ? MODELO_VOYAGE : MODELO_EMBEDDINGS);
 export const TIMEOUT_EMBEDDING_MS = entero('TIMEOUT_EMBEDDING_MS', 5_000);
 /** Candidatos que la búsqueda híbrida le pasa al modelo para elegir y redactar. */
 // 40 se quedaba corto en temas amplios: con "artículos sobre comida", dos

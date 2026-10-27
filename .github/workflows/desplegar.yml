@@ -22,6 +22,9 @@
 #   GEMINI_API_KEY         llave de aistudio.google.com/apikey (vectores)
 #   ANTHROPIC_API_KEY      llave de console.anthropic.com (Claude Haiku: router y
 #                          respuestas). Se copia a los secretos de la función.
+#   VOYAGE_API_KEY         llave de dashboard.voyageai.com (vectores con voyage-4).
+#                          Opcional: con ella, vectores y búsqueda pasan de Gemini
+#                          a Voyage. Va junto con la migración 0012.
 # La service role NO se guarda en GitHub: se pide a la Management API en cada
 # corrida y se enmascara en los logs.
 
@@ -31,9 +34,10 @@ on:
   workflow_dispatch:
     inputs:
       migracion:
-        # La 0011 es idempotente (if not exists / create or replace): volver a
-        # aplicarla no cambia nada, así que va por defecto y nadie tiene que
-        # acordarse de escribirla. Para una migración nueva, cambiar aquí.
+        # La 0011 es idempotente (create or replace): volver a aplicarla no
+        # cambia nada, así que va por defecto. La 0012 (vectores de Voyage)
+        # NO va por defecto: cambia el proveedor de vectores y solo se aplica
+        # a propósito, con el secreto VOYAGE_API_KEY ya puesto.
         description: 'Migración a aplicar (vacío = ninguna)'
         required: false
         default: '0011_busqueda_sin_filtro_acotada.sql'
@@ -90,7 +94,12 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           MIGRACION: ${{ inputs.migracion }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
         run: |
+          if [ "$MIGRACION" = "0012_vectores_voyage.sql" ] && [ -z "$VOYAGE_API_KEY" ]; then
+            echo "::error::La 0012 pasa los vectores a Voyage: primero agrega el secreto VOYAGE_API_KEY."
+            exit 1
+          fi
           # Solo nombres de archivo de migración: nada de rutas ni comandos.
           if ! [[ "$MIGRACION" =~ ^[0-9]{4}_[a-z0-9_]+\.sql$ ]]; then
             echo "::error::Nombre de migración inválido: $MIGRACION"; exit 1
@@ -118,17 +127,24 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
         run: |
-          # La llave de Claude vive en los secretos de GitHub y se copia a los
-          # de la función en cada despliegue. Va por archivo y no por argumento,
-          # para que nunca aparezca en la lista de procesos ni en el log.
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::warning::No hay secreto ANTHROPIC_API_KEY en GitHub: la función responde con Gemini."
-            exit 0
-          fi
+          # Las llaves viven en los secretos de GitHub y se copian a los de la
+          # función en cada despliegue. Van por archivo y no por argumento,
+          # para que nunca aparezcan en la lista de procesos ni en el log.
           umask 077
-          printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY" > "$RUNNER_TEMP/llaves.env"
-          supabase secrets set --env-file "$RUNNER_TEMP/llaves.env" --project-ref "$PROJECT_REF"
+          : > "$RUNNER_TEMP/llaves.env"
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY" >> "$RUNNER_TEMP/llaves.env"
+          else
+            echo "::warning::No hay secreto ANTHROPIC_API_KEY en GitHub: la función responde con Gemini."
+          fi
+          if [ -n "$VOYAGE_API_KEY" ]; then
+            printf 'VOYAGE_API_KEY=%s\n' "$VOYAGE_API_KEY" >> "$RUNNER_TEMP/llaves.env"
+          fi
+          if [ -s "$RUNNER_TEMP/llaves.env" ]; then
+            supabase secrets set --env-file "$RUNNER_TEMP/llaves.env" --project-ref "$PROJECT_REF"
+          fi
           rm -f "$RUNNER_TEMP/llaves.env"
 
       - name: Desplegar Edge Functions
@@ -198,9 +214,10 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
         run: |
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "::error::Falta el secreto GEMINI_API_KEY (Settings → Secrets and variables → Actions)."
+          if [ -z "$GEMINI_API_KEY" ] && [ -z "$VOYAGE_API_KEY" ]; then
+            echo "::error::Falta el secreto VOYAGE_API_KEY o GEMINI_API_KEY (Settings → Secrets and variables → Actions)."
             exit 1
           fi
           llaves=$(curl -sS --fail-with-body \
@@ -214,6 +231,12 @@ jobs:
           echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"
           export SUPABASE_SERVICE_ROLE_KEY
           npm ci --no-audit --no-fund
-          # 850, no 1,000: el resto del cupo diario es para las preguntas en vivo.
-          npm run embeber -- --limite=850
+          if [ -n "$VOYAGE_API_KEY" ]; then
+            # Voyage: sin cupo diario que repartir; todo lo pendiente de una vez.
+            npm run embeber
+          else
+            # Gemini: 850, no 1,000; el resto del cupo diario es para las
+            # preguntas en vivo.
+            npm run embeber -- --limite=850
+          fi
 
